@@ -39,3 +39,31 @@ test("creating a session returns an id", async ({ request }) => {
   expect(body.id).toBeTruthy();
   expect(typeof body.id).toBe("string");
 });
+
+test("answer endpoint rejects when no question is pending", async ({ request }) => {
+  const session = await (
+    await request.post("/api/sessions", { data: {} })
+  ).json();
+  // No ask_question has been asked, so resolving should 409.
+  const res = await request.post(`/api/sessions/${session.id}/answers`, {
+    data: { questionId: "q-none", answer: "x" },
+  });
+  expect(res.status()).toBe(409);
+});
+
+test("answer endpoint validates required fields", async ({ request }) => {
+  const session = await (
+    await request.post("/api/sessions", { data: {} })
+  ).json();
+  const res = await request.post(`/api/sessions/${session.id}/answers`, {
+    data: {},
+  });
+  expect(res.status()).toBe(400);
+});
+
+test("answer endpoint 404s for unknown session", async ({ request }) => {
+  const res = await request.post("/api/sessions/does-not-exist/answers", {
+    data: { questionId: "q", answer: "a" },
+  });
+  expect(res.status()).toBe(404);
+});

@@ -37,4 +37,10 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     }),
+  answerQuestion: (id: string, questionId: string, answer: string) =>
+    fetch(`${base}/api/sessions/${id}/answers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionId, answer }),
+    }),
 };

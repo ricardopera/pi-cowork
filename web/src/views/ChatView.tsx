@@ -1,15 +1,19 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import { SessionSocket } from "../lib/ws";
-import type { WireEvent } from "../lib/events";
+import type { WireEvent, TodoItem } from "../lib/events";
 import { MessageList } from "../components/MessageList";
 import { Composer } from "../components/Composer";
+import { TaskList } from "../components/TaskList";
+import { QuestionCard, type Question } from "../components/QuestionCard";
 import type { Turn, ToolRecord } from "../components/types";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [question, setQuestion] = useState<Question | null>(null);
   const [socket, setSocket] = useState<SessionSocket | null>(null);
 
   const handleEvent = useCallback((e: WireEvent) => {
@@ -45,12 +49,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
             ...t,
             tools: t.tools.map((tr) =>
               tr.toolCallId === e.toolCallId
-                ? {
-                    ...tr,
-                    result: e.result,
-                    isError: e.isError,
-                    status: "done",
-                  }
+                ? { ...tr, result: e.result, isError: e.isError, status: "done" }
                 : tr,
             ),
           }));
@@ -76,6 +75,24 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       }
       return next;
     });
+
+    // Non-turn state: task list and clarifying questions live outside the
+    // message bubbles (persistent UI), handled here.
+    switch (e.type) {
+      case "todo_update":
+        setTodos(e.todos);
+        break;
+      case "ask_question":
+        setQuestion({
+          questionId: e.questionId,
+          question: e.question,
+          options: e.options,
+        });
+        break;
+      case "question_answered":
+        setQuestion((q) => (q && q.questionId === e.questionId ? null : q));
+        break;
+    }
   }, []);
 
   useEffect(() => {
@@ -104,8 +121,20 @@ export function ChatView({ sessionId }: { sessionId: string }) {
     api.sendMessage(sessionId, text);
   };
 
+  const onAnswer = (questionId: string, answer: string) => {
+    api.answerQuestion(sessionId, questionId, answer);
+    // Optimistically clear; the server will also send question_answered.
+    setQuestion(null);
+  };
+
   return (
     <div className="chatview">
+      {(todos.length > 0 || question) && (
+        <div className="sidebarwidgets">
+          {todos.length > 0 && <TaskList todos={todos} />}
+          {question && <QuestionCard question={question} onAnswer={onAnswer} />}
+        </div>
+      )}
       <MessageList turns={turns} />
       <Composer onSend={send} disabled={busy} status={status} />
       {busy && socket && (

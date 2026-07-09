@@ -10,7 +10,16 @@ export type WireEvent =
   | { type: "agent_start"; sessionId: string }
   | { type: "agent_end"; sessionId: string }
   | { type: "status"; sessionId: string; status: "compacting" | "retrying" | "idle" | "error"; message?: string }
+  | { type: "ask_question"; sessionId: string; questionId: string; question: string; options?: string[] }
+  | { type: "question_answered"; sessionId: string; questionId: string }
+  | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
   | { type: "error"; sessionId: string; message: string };
+
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority?: "high" | "medium" | "low";
+}
 
 export interface ProviderInfo {
   id: string;
