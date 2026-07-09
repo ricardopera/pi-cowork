@@ -23,6 +23,8 @@ export type WireEvent =
   | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
   // deliverables surfaced to the user (present_files tool)
   | { type: "present_files"; sessionId: string; files: PresentedFile[] }
+  // live HTML artifact created (create_artifact tool)
+  | { type: "artifact"; sessionId: string; artifactId: string; title: string }
   // errors
   | { type: "error"; sessionId: string; message: string };
 

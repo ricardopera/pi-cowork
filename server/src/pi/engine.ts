@@ -5,6 +5,7 @@ import { createCoworkTools } from "./cowork-tools.js";
 import { createDocTools, DOC_TOOL_NAMES } from "./doc-tools.js";
 import { createMemoryTools, MEMORY_TOOL_NAMES } from "./memory-tools.js";
 import { createChromeTools, CHROME_TOOL_NAMES } from "./chrome-tools.js";
+import { createArtifactTools, ARTIFACT_TOOL_NAMES } from "./artifacts.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -139,20 +140,32 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
     emitFiles: (files) => emitWire({ type: "present_files", sessionId, files }),
   });
 
+  // Artifact tools (live HTML), wired to the artifact store + event stream.
+  const artifactTools = createArtifactTools({
+    emitArtifact: (artifactId, title) =>
+      emitWire({ type: "artifact", sessionId, artifactId, title }),
+  });
+
   const { session } = await createAgentSession({
     cwd,
     model: opts.model,
     authStorage: getAuthStorage(),
     modelRegistry: getModelRegistry(),
-    // Allowlist: built-ins plus our cowork + doc + memory + chrome tools.
     tools: opts.tools ?? [
       "read", "bash", "edit", "write", "grep",
       "ask_question", "todo_write",
       ...DOC_TOOL_NAMES,
       ...MEMORY_TOOL_NAMES,
       ...CHROME_TOOL_NAMES,
+      ...ARTIFACT_TOOL_NAMES,
     ],
-    customTools: [...coworkTools, ...docTools, ...memoryTools, ...chromeTools],
+    customTools: [
+      ...coworkTools,
+      ...docTools,
+      ...memoryTools,
+      ...chromeTools,
+      ...artifactTools,
+    ],
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd),

@@ -14,6 +14,7 @@ export type WireEvent =
   | { type: "question_answered"; sessionId: string; questionId: string }
   | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
   | { type: "present_files"; sessionId: string; files: PresentedFile[] }
+  | { type: "artifact"; sessionId: string; artifactId: string; title: string }
   | { type: "error"; sessionId: string; message: string };
 
 export interface PresentedFile {

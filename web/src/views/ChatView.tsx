@@ -7,6 +7,7 @@ import { Composer } from "../components/Composer";
 import { TaskList } from "../components/TaskList";
 import { QuestionCard, type Question } from "../components/QuestionCard";
 import { FileChips } from "../components/FileChips";
+import { ArtifactPanel, type Artifact } from "../components/ArtifactPanel";
 import type { Turn, ToolRecord } from "../components/types";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
@@ -16,6 +17,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [question, setQuestion] = useState<Question | null>(null);
   const [files, setFiles] = useState<PresentedFile[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [socket, setSocket] = useState<SessionSocket | null>(null);
 
   const handleEvent = useCallback((e: WireEvent) => {
@@ -87,6 +89,12 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       case "present_files":
         setFiles((prev) => [...prev, ...e.files]);
         break;
+      case "artifact":
+        setArtifacts((prev) => [
+          ...prev,
+          { artifactId: e.artifactId, title: e.title },
+        ]);
+        break;
       case "ask_question":
         setQuestion({
           questionId: e.questionId,
@@ -134,20 +142,27 @@ export function ChatView({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="chatview">
-      {(todos.length > 0 || question || files.length > 0) && (
-        <div className="sidebarwidgets">
-          {todos.length > 0 && <TaskList todos={todos} />}
-          {question && <QuestionCard question={question} onAnswer={onAnswer} />}
-          {files.length > 0 && <FileChips files={files} />}
+      {artifacts.length > 0 && (
+        <div className="artifact-rail">
+          <ArtifactPanel artifacts={artifacts} />
         </div>
       )}
-      <MessageList turns={turns} />
-      <Composer onSend={send} disabled={busy} status={status} />
-      {busy && socket && (
-        <button className="abort" onClick={() => socket.abort()}>
-          Stop
-        </button>
-      )}
+      <div className="chat-main">
+        {(todos.length > 0 || question || files.length > 0) && (
+          <div className="sidebarwidgets">
+            {todos.length > 0 && <TaskList todos={todos} />}
+            {question && <QuestionCard question={question} onAnswer={onAnswer} />}
+            {files.length > 0 && <FileChips files={files} />}
+          </div>
+        )}
+        <MessageList turns={turns} />
+        <Composer onSend={send} disabled={busy} status={status} />
+        {busy && socket && (
+          <button className="abort" onClick={() => socket.abort()}>
+            Stop
+          </button>
+        )}
+      </div>
     </div>
   );
 }
