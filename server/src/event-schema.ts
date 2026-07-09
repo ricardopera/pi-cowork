@@ -15,6 +15,12 @@ export type WireEvent =
   | { type: "agent_end"; sessionId: string }
   // status
   | { type: "status"; sessionId: string; status: "compacting" | "retrying" | "idle" | "error"; message?: string }
+  // clarifying question (ask_question tool) — agent is paused awaiting an answer
+  | { type: "ask_question"; sessionId: string; questionId: string; question: string; options?: string[] }
+  // answer submitted (lets all clients clear the pending card)
+  | { type: "question_answered"; sessionId: string; questionId: string }
+  // task list (todo_write tool) — full replacement list
+  | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
   // errors
   | { type: "error"; sessionId: string; message: string };
 
@@ -22,6 +28,17 @@ export type WireEvent =
 export type WireCommand =
   | { type: "subscribe"; sessionId: string }
   | { type: "abort"; sessionId: string };
+
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority?: "high" | "medium" | "low";
+}
+
+export interface AskAnswerPayload {
+  questionId: string;
+  answer: string;
+}
 
 export interface SessionInfo {
   id: string;

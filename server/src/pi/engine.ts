@@ -1,6 +1,7 @@
 import { createAgentSession, SessionManager, type AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import { getAuthStorage, getModelRegistry } from "./providers.js";
+import { createCoworkTools } from "./cowork-tools.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -18,6 +19,10 @@ export interface PiSessionHandle {
   onEvent: (handler: (e: WireEvent) => void) => () => void;
   prompt: (text: string) => Promise<void>;
   abort: () => Promise<void>;
+  /** Resolve a pending ask_question with the user's answer. Returns false if no pending question. */
+  resolveAnswer: (questionId: string, answer: string) => boolean;
+  /** Whether a clarifying question is currently awaiting an answer. */
+  hasPendingQuestion: () => boolean;
   dispose: () => void;
 }
 
@@ -91,25 +96,52 @@ export function piEventToWireEvent(sessionId: string, event: any): WireEvent | n
 
 export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiSessionHandle> {
   const cwd = opts.cwd;
+  const sessionId = opts.sessionId;
+  const listeners = new Set<(e: WireEvent) => void>();
+
+  // Pending ask_question resolvers, keyed by questionId (= toolCallId).
+  const pendingQuestions = new Map<string, { resolve: (a: string) => void; reject: (e: Error) => void }>();
+
+  const emitWire = (e: WireEvent) => {
+    for (const l of listeners) l(e);
+  };
+
+  // Cowork custom tools, wired to this session's event stream + answer resolver.
+  const coworkTools = createCoworkTools({
+    emit: (evt) => {
+      if (evt.kind === "ask_question") {
+        emitWire({ type: "ask_question", sessionId, questionId: evt.questionId, question: evt.question, options: evt.options });
+      } else if (evt.kind === "todo_update") {
+        emitWire({ type: "todo_update", sessionId, todos: evt.todos });
+      }
+    },
+    registerQuestion: (questionId: string) =>
+      new Promise<string>((resolve, reject) => {
+        pendingQuestions.set(questionId, { resolve, reject });
+      }),
+  });
+
   const { session } = await createAgentSession({
     cwd,
     model: opts.model,
     authStorage: getAuthStorage(),
     modelRegistry: getModelRegistry(),
-    tools: opts.tools ?? ["read", "bash", "edit", "write", "grep"],
+    // Allowlist: built-ins plus our cowork tools. (customTools are auto-enabled
+    // but we set tools explicitly so the agent also keeps read/bash/edit/write/grep.)
+    tools: opts.tools ?? ["read", "bash", "edit", "write", "grep", "ask_question", "todo_write"],
+    customTools: coworkTools,
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd),
   });
 
-  const listeners = new Set<(e: WireEvent) => void>();
   const unsubscribe = session.subscribe((event: any) => {
-    const wire = piEventToWireEvent(opts.sessionId, event);
-    if (wire) for (const l of listeners) l(wire);
+    const wire = piEventToWireEvent(sessionId, event);
+    if (wire) emitWire(wire);
   });
 
   return {
-    sessionId: opts.sessionId,
+    sessionId,
     session,
     onEvent: (handler) => {
       listeners.add(handler);
@@ -123,11 +155,24 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       try {
         await session.prompt(text);
       } catch (err: any) {
-        emitError(opts.sessionId, listeners, err?.message ?? String(err));
+        emitError(sessionId, listeners, err?.message ?? String(err));
       }
     },
     abort: () => session.abort(),
+    resolveAnswer: (questionId: string, answer: string): boolean => {
+      const pending = pendingQuestions.get(questionId);
+      if (!pending) return false;
+      pendingQuestions.delete(questionId);
+      pending.resolve(answer);
+      // Notify all clients the question has been answered (so they clear the card).
+      emitWire({ type: "question_answered", sessionId, questionId });
+      return true;
+    },
+    hasPendingQuestion: () => pendingQuestions.size > 0,
     dispose: () => {
+      // Reject any still-pending questions so the tool promise doesn't leak.
+      for (const [, p] of pendingQuestions) p.reject(new Error("session disposed"));
+      pendingQuestions.clear();
       unsubscribe();
       listeners.clear();
       session.dispose();
