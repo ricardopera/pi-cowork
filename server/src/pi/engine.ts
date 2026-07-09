@@ -8,6 +8,7 @@ import { createChromeTools, CHROME_TOOL_NAMES } from "./chrome-tools.js";
 import { createArtifactTools, ARTIFACT_TOOL_NAMES } from "./artifacts.js";
 import { getMcpManager } from "./mcp-connectors.js";
 import { createSubagentTool, SUBAGENT_TOOL_NAMES } from "./subagent-tool.js";
+import { createComputerUseTools, COMPUTER_USE_TOOL_NAMES } from "./computer-use.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -155,6 +156,12 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
   // Sub-agent dispatch tool (concurrent in-memory sub-sessions).
   const subagentTool = createSubagentTool();
 
+  // Computer-use tools (desktop automation via nut-js).
+  const computerUseTools = createComputerUseTools({
+    cwd,
+    emitFiles: (files) => emitWire({ type: "present_files", sessionId, files }),
+  });
+
   const { session } = await createAgentSession({
     cwd,
     model: opts.model,
@@ -169,6 +176,7 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       ...ARTIFACT_TOOL_NAMES,
       ...mcpToolNames,
       ...SUBAGENT_TOOL_NAMES,
+      ...COMPUTER_USE_TOOL_NAMES,
     ],
     customTools: [
       ...coworkTools,
@@ -178,6 +186,7 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       ...artifactTools,
       ...mcpTools,
       subagentTool,
+      ...computerUseTools,
     ],
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)

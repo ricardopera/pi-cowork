@@ -83,3 +83,65 @@ test("file download endpoint serves workspace files and blocks traversal", async
   const body = await traversal.text();
   expect(body).not.toContain("root:"); // must not contain /etc/passwd content
 });
+
+test("commands endpoint lists built-in commands", async ({ request }) => {
+  const res = await request.get("/api/commands");
+  const body = await res.json();
+  const names = body.commands.map((c: any) => c.name);
+  expect(names).toEqual(expect.arrayContaining(["help", "todo", "doc", "research"]));
+});
+
+test("slash command routes through the command system", async ({ request }) => {
+  const session = await (await request.post("/api/sessions", { data: {} })).json();
+  const res = await request.post(`/api/sessions/${session.id}/messages`, {
+    data: { text: "/help" },
+  });
+  const body = await res.json();
+  expect(body.command).toBe(true);
+  expect(body.reply).toContain("Commands:");
+});
+
+test("projects endpoint returns at least the default project", async ({ request }) => {
+  const res = await request.get("/api/projects");
+  const body = await res.json();
+  expect(body.projects.find((p: any) => p.id === "default")).toBeTruthy();
+});
+
+test("can create and list a project", async ({ request }) => {
+  const created = await (
+    await request.post("/api/projects", { data: { name: "E2E Project" } })
+  ).json();
+  expect(created.name).toBe("E2E Project");
+  const all = await (await request.get("/api/projects")).json();
+  expect(all.projects.find((p: any) => p.id === created.id)).toBeTruthy();
+});
+
+test("skills endpoint returns seeded starter skills", async ({ request }) => {
+  const res = await request.get("/api/skills");
+  const body = await res.json();
+  const names = body.skills.map((s: any) => s.name);
+  expect(names.length).toBeGreaterThan(0);
+});
+
+test("connectors endpoint starts empty", async ({ request }) => {
+  const res = await request.get("/api/connectors");
+  const body = await res.json();
+  expect(Array.isArray(body.connectors)).toBe(true);
+});
+
+test("tasks endpoint starts as a list", async ({ request }) => {
+  const res = await request.get("/api/tasks");
+  const body = await res.json();
+  expect(Array.isArray(body.tasks)).toBe(true);
+});
+
+test("artifacts endpoint returns a list", async ({ request }) => {
+  const res = await request.get("/api/artifacts");
+  const body = await res.json();
+  expect(Array.isArray(body.artifacts)).toBe(true);
+});
+
+test("rejects a connector with missing fields", async ({ request }) => {
+  const res = await request.post("/api/connectors", { data: { name: "x" } });
+  expect(res.status()).toBe(400);
+});
