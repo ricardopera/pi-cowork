@@ -1,6 +1,6 @@
 import { createAgentSession, SessionManager, type AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
-import { getAuthStorage, getModelRegistry } from "./providers.js";
+import { getAuthStorage, getModelRegistry, defaultModel } from "./providers.js";
 import { createCoworkTools } from "./cowork-tools.js";
 import { createDocTools, DOC_TOOL_NAMES } from "./doc-tools.js";
 import { createMemoryTools, MEMORY_TOOL_NAMES } from "./memory-tools.js";
@@ -105,6 +105,9 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
   const cwd = opts.cwd;
   const sessionId = opts.sessionId;
   const listeners = new Set<(e: WireEvent) => void>();
+  // Fall back to the keyless Zen free model so sessions produce responses even
+  // with no provider key configured (Pi-Cowork's zero-config default).
+  const model = opts.model ?? defaultModel();
 
   // Pending ask_question resolvers, keyed by questionId (= toolCallId).
   const pendingQuestions = new Map<string, { resolve: (a: string) => void; reject: (e: Error) => void }>();
@@ -164,7 +167,7 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
 
   const { session } = await createAgentSession({
     cwd,
-    model: opts.model,
+    model,
     authStorage: getAuthStorage(),
     modelRegistry: getModelRegistry(),
     tools: opts.tools ?? [

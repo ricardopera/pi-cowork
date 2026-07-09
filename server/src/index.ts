@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import { config } from "./config.js";
-import { initAuthStorage, seedFromEnv } from "./pi/providers.js";
+import { initAuthStorage, seedFromEnv, registerKeylessZenProvider } from "./pi/providers.js";
 import { providerRoutes } from "./routes/providers.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { messageRoutes } from "./routes/messages.js";
@@ -29,6 +29,8 @@ async function main() {
 
   initAuthStorage();
   seedFromEnv();
+  // Register keyless Zen free models so chat works out-of-the-box with no API key.
+  registerKeylessZenProvider();
 
   const app = Fastify({ logger: true });
 
