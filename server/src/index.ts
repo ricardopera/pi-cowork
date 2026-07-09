@@ -4,6 +4,7 @@ import { initAuthStorage, seedFromEnv } from "./pi/providers.js";
 import { providerRoutes } from "./routes/providers.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { messageRoutes } from "./routes/messages.js";
+import { fileRoutes } from "./routes/files.js";
 import { attachWebSocket } from "./ws.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -25,6 +26,7 @@ async function main() {
   await app.register(providerRoutes);
   await app.register(sessionRoutes);
   await app.register(messageRoutes);
+  await app.register(fileRoutes);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   attachWebSocket(app.server);

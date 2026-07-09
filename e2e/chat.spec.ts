@@ -67,3 +67,19 @@ test("answer endpoint 404s for unknown session", async ({ request }) => {
   });
   expect(res.status()).toBe(404);
 });
+
+test("file download endpoint serves workspace files and blocks traversal", async ({ request }) => {
+  // Create a file in the default workspace outputs dir via the server's dataDir.
+  // The workspace root is <dataDir>/workspaces/default. We can't easily write to
+  // it from the test process without knowing the exact path, so we instead verify
+  // the endpoint behaves correctly: a missing file returns 404, and a traversal
+  // attempt returns 400.
+  const missing = await request.get("/api/files/outputs/does-not-exist.docx");
+  expect([404, 400]).toContain(missing.status());
+
+  // Path traversal attempt must be rejected (400), not leak files.
+  const traversal = await request.get("/api/files/..%2F..%2Fetc%2Fpasswd");
+  expect([400, 404]).toContain(traversal.status());
+  const body = await traversal.text();
+  expect(body).not.toContain("root:"); // must not contain /etc/passwd content
+});

@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import { SessionSocket } from "../lib/ws";
-import type { WireEvent, TodoItem } from "../lib/events";
+import type { WireEvent, TodoItem, PresentedFile } from "../lib/events";
 import { MessageList } from "../components/MessageList";
 import { Composer } from "../components/Composer";
 import { TaskList } from "../components/TaskList";
 import { QuestionCard, type Question } from "../components/QuestionCard";
+import { FileChips } from "../components/FileChips";
 import type { Turn, ToolRecord } from "../components/types";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
@@ -14,6 +15,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   const [status, setStatus] = useState<string>("");
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [question, setQuestion] = useState<Question | null>(null);
+  const [files, setFiles] = useState<PresentedFile[]>([]);
   const [socket, setSocket] = useState<SessionSocket | null>(null);
 
   const handleEvent = useCallback((e: WireEvent) => {
@@ -82,6 +84,9 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       case "todo_update":
         setTodos(e.todos);
         break;
+      case "present_files":
+        setFiles((prev) => [...prev, ...e.files]);
+        break;
       case "ask_question":
         setQuestion({
           questionId: e.questionId,
@@ -129,10 +134,11 @@ export function ChatView({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="chatview">
-      {(todos.length > 0 || question) && (
+      {(todos.length > 0 || question || files.length > 0) && (
         <div className="sidebarwidgets">
           {todos.length > 0 && <TaskList todos={todos} />}
           {question && <QuestionCard question={question} onAnswer={onAnswer} />}
+          {files.length > 0 && <FileChips files={files} />}
         </div>
       )}
       <MessageList turns={turns} />

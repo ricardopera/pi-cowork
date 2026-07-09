@@ -13,7 +13,15 @@ export type WireEvent =
   | { type: "ask_question"; sessionId: string; questionId: string; question: string; options?: string[] }
   | { type: "question_answered"; sessionId: string; questionId: string }
   | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
+  | { type: "present_files"; sessionId: string; files: PresentedFile[] }
   | { type: "error"; sessionId: string; message: string };
+
+export interface PresentedFile {
+  name: string;
+  path: string;
+  format: "docx" | "xlsx" | "pptx" | "pdf" | "md" | "html" | "txt" | "other";
+  sizeBytes: number;
+}
 
 export interface TodoItem {
   content: string;

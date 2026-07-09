@@ -544,3 +544,51 @@ button.ghost.small {
   margin-top: 8px;
   font-style: italic;
 }
+
+/* File deliverable chips */
+.filechips {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.filechips-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.filechips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.filechip:hover {
+  border-color: var(--accent);
+}
+.filechip-icon {
+  font-size: 16px;
+}
+.filechip-name {
+  font-weight: 500;
+}
+.filechip-size {
+  color: var(--muted);
+  font-size: 11px;
+}

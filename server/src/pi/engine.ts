@@ -2,6 +2,7 @@ import { createAgentSession, SessionManager, type AgentSession } from "@earendil
 import type { Model } from "@earendil-works/pi-ai";
 import { getAuthStorage, getModelRegistry } from "./providers.js";
 import { createCoworkTools } from "./cowork-tools.js";
+import { createDocTools, DOC_TOOL_NAMES } from "./doc-tools.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -121,15 +122,25 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       }),
   });
 
+  // Document-creation tools + present_files, wired to the workspace + event stream.
+  const docTools = createDocTools({
+    cwd,
+    emitFiles: (files) => emitWire({ type: "present_files", sessionId, files }),
+  });
+
   const { session } = await createAgentSession({
     cwd,
     model: opts.model,
     authStorage: getAuthStorage(),
     modelRegistry: getModelRegistry(),
-    // Allowlist: built-ins plus our cowork tools. (customTools are auto-enabled
+    // Allowlist: built-ins plus our cowork + doc tools. (customTools are auto-enabled
     // but we set tools explicitly so the agent also keeps read/bash/edit/write/grep.)
-    tools: opts.tools ?? ["read", "bash", "edit", "write", "grep", "ask_question", "todo_write"],
-    customTools: coworkTools,
+    tools: opts.tools ?? [
+      "read", "bash", "edit", "write", "grep",
+      "ask_question", "todo_write",
+      ...DOC_TOOL_NAMES,
+    ],
+    customTools: [...coworkTools, ...docTools],
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd),

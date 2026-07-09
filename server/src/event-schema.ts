@@ -21,8 +21,17 @@ export type WireEvent =
   | { type: "question_answered"; sessionId: string; questionId: string }
   // task list (todo_write tool) — full replacement list
   | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
+  // deliverables surfaced to the user (present_files tool)
+  | { type: "present_files"; sessionId: string; files: PresentedFile[] }
   // errors
   | { type: "error"; sessionId: string; message: string };
+
+export interface PresentedFile {
+  name: string;
+  path: string; // path relative to the session workspace
+  format: "docx" | "xlsx" | "pptx" | "pdf" | "md" | "html" | "txt" | "other";
+  sizeBytes: number;
+}
 
 // Browser->server WS commands.
 export type WireCommand =
