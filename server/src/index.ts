@@ -5,7 +5,9 @@ import { providerRoutes } from "./routes/providers.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { messageRoutes } from "./routes/messages.js";
 import { fileRoutes } from "./routes/files.js";
+import { skillRoutes } from "./routes/skills.js";
 import { attachWebSocket } from "./ws.js";
+import { SkillsManager } from "./pi/skills.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -27,6 +29,10 @@ async function main() {
   await app.register(sessionRoutes);
   await app.register(messageRoutes);
   await app.register(fileRoutes);
+  await app.register(skillRoutes);
+
+  // Seed starter skills into the global library on first run.
+  await new SkillsManager(path.join(config.dataDir, "workspaces", "default")).seedBuiltin();
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   attachWebSocket(app.server);
