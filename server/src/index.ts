@@ -7,8 +7,11 @@ import { messageRoutes } from "./routes/messages.js";
 import { fileRoutes } from "./routes/files.js";
 import { skillRoutes } from "./routes/skills.js";
 import { artifactRoutes } from "./routes/artifacts.js";
+import { schedulerRoutes } from "./routes/scheduler.js";
 import { attachWebSocket } from "./ws.js";
 import { SkillsManager } from "./pi/skills.js";
+import { getScheduler } from "./pi/scheduler.js";
+import { createPiSession } from "./pi/engine.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -32,9 +35,29 @@ async function main() {
   await app.register(fileRoutes);
   await app.register(skillRoutes);
   await app.register(artifactRoutes);
+  await app.register(schedulerRoutes);
 
   // Seed starter skills into the global library on first run.
   await new SkillsManager(path.join(config.dataDir, "workspaces", "default")).seedBuiltin();
+
+  // Initialize the scheduler: load persisted tasks and set the runner to spin
+  // up an in-memory Pi session for each scheduled prompt.
+  const scheduler = getScheduler();
+  await scheduler.load();
+  scheduler.setRunner(async (prompt) => {
+    const cwd = path.join(config.dataDir, "workspaces", "default");
+    const handle = await createPiSession({
+      sessionId: `scheduled-${Date.now()}`,
+      cwd,
+      inMemory: true,
+    });
+    try {
+      await handle.prompt(prompt);
+      return "completed";
+    } finally {
+      handle.dispose();
+    }
+  });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   attachWebSocket(app.server);
