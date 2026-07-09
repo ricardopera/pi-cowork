@@ -3,6 +3,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import { getAuthStorage, getModelRegistry } from "./providers.js";
 import { createCoworkTools } from "./cowork-tools.js";
 import { createDocTools, DOC_TOOL_NAMES } from "./doc-tools.js";
+import { createMemoryTools, MEMORY_TOOL_NAMES } from "./memory-tools.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -128,19 +129,22 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
     emitFiles: (files) => emitWire({ type: "present_files", sessionId, files }),
   });
 
+  // File-based memory tools, wired to the workspace memory/ dir.
+  const memoryTools = createMemoryTools({ cwd });
+
   const { session } = await createAgentSession({
     cwd,
     model: opts.model,
     authStorage: getAuthStorage(),
     modelRegistry: getModelRegistry(),
-    // Allowlist: built-ins plus our cowork + doc tools. (customTools are auto-enabled
-    // but we set tools explicitly so the agent also keeps read/bash/edit/write/grep.)
+    // Allowlist: built-ins plus our cowork + doc + memory tools.
     tools: opts.tools ?? [
       "read", "bash", "edit", "write", "grep",
       "ask_question", "todo_write",
       ...DOC_TOOL_NAMES,
+      ...MEMORY_TOOL_NAMES,
     ],
-    customTools: [...coworkTools, ...docTools],
+    customTools: [...coworkTools, ...docTools, ...memoryTools],
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd),
