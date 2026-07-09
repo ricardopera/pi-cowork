@@ -24,7 +24,7 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 - Pi Agent embedded in-process: `createAgentSession` → `subscribe()` events → WebSocket → browser
 - All four providers configurable; live model catalogs per provider
 - Session lifecycle (create / list / abort) with streaming over WebSocket
-- Bash destructive-command guardrails; prompt errors surfaced to the client
+- **Cowork-style safety guardrails** enforced via a `tool_call` hook: a **prohibited-action list** (banking/ID data, system-file/permission mods, trades, destructive commands, secret exfiltration — always blocked) and an **explicit-permission list** (downloads, purchases, OAuth, publishing, sending messages, mass-deletes — surfaced as Approve/Deny cards the user must confirm); prompt errors surfaced to the client
 
 **31 agent tools** (registered per session):
 - *Workflow:* `ask_question` (clarifying cards, pauses agent), `todo_write` (task-list widget)
@@ -111,8 +111,8 @@ Browser (React + Vite + TS)  ──WS──▶  Server (Fastify + ws)
 ## Testing
 
 ```bash
-npm test      # server unit tests (vitest) — 97 tests across 14 files
-npm run e2e   # playwright e2e — 19 tests (incl. a live LLM streaming test)
+npm test      # server unit tests (vitest) — 112 tests across 15 files
+npm run e2e   # playwright e2e — 21 tests (incl. a live LLM streaming test)
 npm -w web run build   # type-check + build the frontend
 ```
 
