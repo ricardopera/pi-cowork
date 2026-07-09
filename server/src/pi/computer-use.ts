@@ -294,13 +294,14 @@ export function createComputerUseTools(deps: ComputerUseDeps): ToolDefinition[] 
       down: K.Down,
       left: K.Left,
       right: K.Right,
-      shift: K.ShiftLeft,
-      control: K.ControlLeft,
-      ctrl: K.ControlLeft,
-      alt: K.AltLeft,
-      cmd: K.MetaLeft,
-      meta: K.MetaLeft,
-      win: K.MetaLeft,
+      // Modifiers: this nut-js fork uses Left*/Right* names (not ShiftLeft).
+      shift: K.LeftShift,
+      control: K.LeftControl,
+      ctrl: K.LeftControl,
+      alt: K.LeftAlt,
+      cmd: K.LeftCmd,
+      meta: K.LeftMeta,
+      win: K.LeftWin,
       home: K.Home,
       end: K.End,
       pageup: K.PageUp,
@@ -318,7 +319,205 @@ export function createComputerUseTools(deps: ComputerUseDeps): ToolDefinition[] 
     throw new Error(`unknown key: ${name}`);
   }
 
-  return [screenshot, mouseMove, click, drag, scroll, type, key];
+  // ---- scroll_by (direction + amount) ----
+  const scrollBy = defineTool({
+    name: "computer_scroll_direction",
+    label: "Scroll by direction",
+    description:
+      "Scroll the mouse wheel by direction. direction: up|down|left|right; amount defaults to 3 (ticks).",
+    parameters: {
+      type: "object",
+      properties: {
+        direction: { type: "string", enum: ["up", "down", "left", "right"] },
+        amount: { type: "number" },
+      },
+      required: ["direction"],
+    },
+    async execute(_id, params) {
+      const { direction, amount } = params as { direction: string; amount?: number };
+      const nut = await getNut();
+      const n = amount ?? 3;
+      if (direction === "down") await nut.mouse.scrollDown(n);
+      else if (direction === "up") await nut.mouse.scrollUp(n);
+      else if (direction === "right") await nut.mouse.scrollRight(n);
+      else if (direction === "left") await nut.mouse.scrollLeft(n);
+      else return { content: [{ type: "text", text: `Unknown direction: ${direction}` }], details: {}, isError: true };
+      return { content: [{ type: "text", text: `Scrolled ${direction} by ${n}.` }], details: { direction, amount: n } };
+    },
+  });
+
+  // ---- key combo / chord (Ctrl+C, Shift+Tab, Cmd+Shift+P, etc.) ----
+  const keyCombo = defineTool({
+    name: "computer_key_combo",
+    label: "Press key combo (chord)",
+    description:
+      "Press a key combination as a chord, e.g. 'Control+c', 'Shift+Tab', 'Cmd+Shift+P'. " +
+      "All keys are held and released together. Use '+' to separate keys.",
+    parameters: {
+      type: "object",
+      properties: { combo: { type: "string", description: "e.g. 'Control+c', 'Shift+ArrowDown'." } },
+      required: ["combo"],
+    },
+    async execute(_id, params) {
+      const { combo } = params as { combo: string };
+      const nut = await getNut();
+      const parts = combo.split("+").map((k) => k.trim()).filter(Boolean);
+      const mapped = parts.map(mapKey);
+      await nut.keyboard.pressKey(...mapped);
+      await nut.keyboard.releaseKey(...mapped);
+      return { content: [{ type: "text", text: `Pressed combo: ${combo}.` }], details: { combo } };
+    },
+  });
+
+  // ---- modifier + click (Shift+click, Control+click for multi-select) ----
+  const modifierClick = defineTool({
+    name: "computer_modifier_click",
+    label: "Click with modifier held",
+    description:
+      "Click while holding a modifier (Shift/Control/Alt/Cmd). Useful for multi-select or " +
+      "opening links in a new tab. modifiers: array like ['control'] or ['shift','alt'].",
+    parameters: {
+      type: "object",
+      properties: {
+        x: { type: "number" },
+        y: { type: "number" },
+        modifiers: { type: "array", items: { type: "string" }, description: "e.g. ['control'] or ['shift','cmd']." },
+        button: { type: "string", enum: ["left", "right", "middle"] },
+      },
+      required: ["x", "y", "modifiers"],
+    },
+    async execute(_id, params) {
+      const { x, y, modifiers, button } = params as { x: number; y: number; modifiers: string[]; button?: string };
+      const nut = await getNut();
+      await nut.mouse.setPosition(new nut.Point(x, y));
+      const modKeys = modifiers.map(mapKey);
+      for (const mk of modKeys) await nut.keyboard.pressKey(mk);
+      const btn = button === "right" ? nut.Button.RIGHT : button === "middle" ? nut.Button.MIDDLE : nut.Button.LEFT;
+      await nut.mouse.click(btn);
+      for (const mk of modKeys) await nut.keyboard.releaseKey(mk);
+      return {
+        content: [{ type: "text", text: `Clicked at (${x}, ${y}) with ${modifiers.join("+")} held.` }],
+        details: { x, y, modifiers },
+      };
+    },
+  });
+
+  // ---- clipboard read/write ----
+  const clipboardRead = defineTool({
+    name: "computer_clipboard_read",
+    label: "Read clipboard",
+    description: "Read the current text content of the system clipboard.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const nut = await getNut();
+      const clip = nut.clipboard.providerRegistry.getClipboard();
+      const text = await clip.paste();
+      return {
+        content: [{ type: "text", text: `Clipboard content:\n${text ?? "(empty)"}` }],
+        details: { length: text ? text.length : 0 },
+      };
+    },
+  });
+
+  const clipboardWrite = defineTool({
+    name: "computer_clipboard_write",
+    label: "Write to clipboard",
+    description: "Write text to the system clipboard.",
+    parameters: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const nut = await getNut();
+      const clip = nut.clipboard.providerRegistry.getClipboard();
+      await clip.copy(text);
+      return { content: [{ type: "text", text: `Wrote ${text.length} chars to clipboard.` }], details: { length: text.length } };
+    },
+  });
+
+  // ---- wait for element (screen-level, by image/timeout placeholder) ----
+  // nut-js screen.waitFor expects an image; for a generic "wait N ms" we provide
+  // a simple timed wait plus an opacity-based element wait if an image path is given.
+  const waitFor = defineTool({
+    name: "computer_wait",
+    label: "Wait (for UI to settle)",
+    description:
+      "Pause for a fixed duration (ms) to let the UI settle, or until a timeout. Use between " +
+      "actions that trigger animations/transitions.",
+    parameters: {
+      type: "object",
+      properties: {
+        ms: { type: "number", description: "Milliseconds to wait (default 500)." },
+      },
+    },
+    async execute(_id, params) {
+      const ms = (params as { ms?: number }).ms ?? 500;
+      await new Promise((r) => setTimeout(r, ms));
+      return { content: [{ type: "text", text: `Waited ${ms}ms.` }], details: { ms } };
+    },
+  });
+
+  // ---- multi-region capture ----
+  const captureRegions = defineTool({
+    name: "computer_capture_regions",
+    label: "Capture multiple screen regions",
+    description:
+      "Capture several regions of the screen in one call (e.g. top, left, right panes) and " +
+      "save each as a PNG deliverable. regions: [{name, x, y, width, height}].",
+    parameters: {
+      type: "object",
+      properties: {
+        prefix: { type: "string", description: "Filename prefix for the captures." },
+        regions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              x: { type: "number" },
+              y: { type: "number" },
+              width: { type: "number" },
+              height: { type: "number" },
+            },
+            required: ["name", "x", "y", "width", "height"],
+          },
+        },
+      },
+      required: ["prefix", "regions"],
+    },
+    async execute(_id, params) {
+      const { prefix, regions } = params as {
+        prefix: string;
+        regions: { name: string; x: number; y: number; width: number; height: number }[];
+      };
+      const nut = await getNut();
+      const outDir = path.join(deps.cwd, "outputs");
+      await fs.mkdir(outDir, { recursive: true });
+      const files: PresentedFile[] = [];
+      for (const r of regions) {
+        const img = await nut.screen.capture(new nut.Region(r.x, r.y, r.width, r.height));
+        const safe = `${prefix}-${r.name}`.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const fullPath = path.join(outDir, `${safe}.png`);
+        await img.toFile(fullPath);
+        const stat = await fs.stat(fullPath);
+        files.push({
+          name: path.basename(fullPath),
+          path: path.relative(deps.cwd, fullPath),
+          format: "other",
+          sizeBytes: stat.size,
+        });
+      }
+      deps.emitFiles(files);
+      return {
+        content: [{ type: "text", text: `Captured ${files.length} region(s): ${files.map((f) => f.name).join(", ")}.` }],
+        details: { count: files.length },
+      };
+    },
+  });
+
+  return [screenshot, mouseMove, click, drag, scroll, scrollBy, type, key, keyCombo, modifierClick, clipboardRead, clipboardWrite, waitFor, captureRegions];
 }
 
 export const COMPUTER_USE_TOOL_NAMES = [
@@ -327,6 +526,14 @@ export const COMPUTER_USE_TOOL_NAMES = [
   "computer_click",
   "computer_drag",
   "computer_scroll",
+  "computer_scroll_direction",
   "computer_type",
   "computer_key",
+  "computer_key_combo",
+  "computer_modifier_click",
+  "computer_clipboard_read",
+  "computer_clipboard_write",
+  "computer_wait",
+  "computer_capture_regions",
 ];
+

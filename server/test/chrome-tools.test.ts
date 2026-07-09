@@ -43,8 +43,36 @@ describe.skipIf(SKIP)("chrome tools", () => {
         "browser_scrape",
         "browser_screenshot",
         "browser_close",
+        "browser_tab_list",
+        "browser_tab_new",
+        "browser_tab_switch",
+        "browser_tab_close",
+        "browser_js",
+        "browser_form_fill",
+        "browser_wait_for",
+        "browser_network",
+        "browser_console",
       ]),
     );
+  });
+
+  it("creates 15 chrome tools", () => {
+    expect(tools().length).toBe(15);
+  });
+
+  it("js_execute requires a script", () => {
+    const schema = byName(tools(), "browser_js").parameters as any;
+    expect(schema.required).toEqual(["script"]);
+  });
+
+  it("form_fill requires fields", () => {
+    const schema = byName(tools(), "browser_form_fill").parameters as any;
+    expect(schema.required).toEqual(["fields"]);
+  });
+
+  it("wait_for requires a selector", () => {
+    const schema = byName(tools(), "browser_wait_for").parameters as any;
+    expect(schema.required).toEqual(["selector"]);
   });
 
   it("navigates to a page and returns title + text", async () => {

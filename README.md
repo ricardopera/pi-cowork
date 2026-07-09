@@ -26,7 +26,7 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 - Session lifecycle (create / list / abort) with streaming over WebSocket
 - **Cowork-style safety guardrails** enforced via a `tool_call` hook: a **prohibited-action list** (banking/ID data, system-file/permission mods, trades, destructive commands, secret exfiltration — always blocked) and an **explicit-permission list** (downloads, purchases, OAuth, publishing, sending messages, mass-deletes — surfaced as Approve/Deny cards the user must confirm); prompt errors surfaced to the client
 
-**31 agent tools** (registered per session):
+**47 agent tools** (registered per session):
 - *Workflow:* `ask_question` (clarifying cards, pauses agent), `todo_write` (task-list widget)
 - *Documents:* `create_docx` / `create_xlsx` / `create_pptx` / `create_pdf` / `create_file` + `present_files` (downloadable deliverables)
 - *Memory:* `memory_write` / `memory_read` / `memory_search` (persistent, typed: user/feedback/project/reference)
