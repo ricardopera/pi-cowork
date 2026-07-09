@@ -21,6 +21,14 @@ export interface PiSessionHandle {
   dispose: () => void;
 }
 
+// Emit a synthetic error event to all listeners, used when prompt() throws
+// synchronously (e.g. missing API key) before the agent loop starts — those
+// errors would otherwise never reach the WS stream.
+function emitError(sessionId: string, listeners: Set<(e: WireEvent) => void>, message: string) {
+  const evt: WireEvent = { type: "error", sessionId, message };
+  for (const l of listeners) l(evt);
+}
+
 /** Pure mapper from a Pi AgentEvent to our wire event. Exported for unit tests. */
 export function piEventToWireEvent(sessionId: string, event: any): WireEvent | null {
   switch (event.type) {
@@ -109,7 +117,15 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
         listeners.delete(handler);
       };
     },
-    prompt: (text: string) => session.prompt(text),
+    // Wrap prompt so synchronous failures (e.g. "No API key found") are surfaced
+    // to subscribers as error events instead of vanishing into a console log.
+    prompt: async (text: string) => {
+      try {
+        await session.prompt(text);
+      } catch (err: any) {
+        emitError(opts.sessionId, listeners, err?.message ?? String(err));
+      }
+    },
     abort: () => session.abort(),
     dispose: () => {
       unsubscribe();
