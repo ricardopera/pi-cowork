@@ -15,7 +15,7 @@ Pi-Cowork gives knowledge workers a chat UI where an AI agent plans tasks, calls
 
 Keys are managed in the in-app **Settings** view or via environment variables, and stored in Pi Agent's `AuthStorage` (`~/.pi/agent/auth.json`). They never leave the server.
 
-## Features (feature-parity with Cowork's headline capabilities)
+## Features (feature-parity with Cowork)
 
 **Agentic core**
 - Chat UI with streaming markdown, thinking display, and collapsible tool cards
@@ -24,17 +24,20 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 - Session lifecycle (create / list / abort) with streaming over WebSocket
 - Bash destructive-command guardrails; prompt errors surfaced to the client
 
-**Knowledge-worker tools (23 total)**
-- `ask_question` — clarifying-question cards that pause the agent until answered
-- `todo_write` — task-list widget with live status (pending / in_progress / completed)
-- `create_docx` / `create_xlsx` / `create_pptx` / `create_pdf` / `create_file` — document creation
-- `present_files` — deliverable file chips (downloadable)
-- `memory_write` / `memory_read` / `memory_search` — file-based memory (user / feedback / project / reference), persistent across sessions
-- `browser_navigate` / `_click` / `_type` / `_scrape` / `_screenshot` / `_close` — Chrome control via Playwright
-- `create_artifact` — live HTML panels rendered in a sandboxed iframe
-- Built-ins: `read`, `bash`, `edit`, `write`, `grep`
+**31 agent tools** (registered per session):
+- *Workflow:* `ask_question` (clarifying cards, pauses agent), `todo_write` (task-list widget)
+- *Documents:* `create_docx` / `create_xlsx` / `create_pptx` / `create_pdf` / `create_file` + `present_files` (downloadable deliverables)
+- *Memory:* `memory_write` / `memory_read` / `memory_search` (persistent, typed: user/feedback/project/reference)
+- *Browser control:* `browser_navigate` / `_click` / `_type` / `_scrape` / `_screenshot` / `_close` (Playwright)
+- *Computer-use:* `computer_screenshot` / `_mouse_move` / `_click` / `_drag` / `_scroll` / `_type` / `_key` (native desktop automation via nut-js)
+- *Artifacts:* `create_artifact` (live HTML in sandboxed iframe)
+- *Sub-agents:* `dispatch_subagents` (runs independent tasks concurrently in separate in-memory sessions)
+- *MCP connectors:* connected MCP-server tools auto-register (dynamic)
+- *Built-ins:* `read`, `bash`, `edit`, `write`, `grep`
 
 **Extensibility & automation**
+- **MCP connectors** — connect to any MCP server (stdio / HTTP / SSE); its tools become agent tools. Managed via REST.
+- **Slash commands** — `/help`, `/todo`, `/doc`, `/research`, `/memory`, `/clear`, `/stop` (extensible registry)
 - **Skills** — markdown skill files (with frontmatter), managed via REST, loaded by Pi Agent from `.agents/skills/`. 3 starter skills seeded.
 - **Scheduled tasks** — cron expressions or one-shot `fireAt`; run autonomously on a tick
 - **Projects** — named, persistent workspaces (outputs / memory / skills / custom instructions scoped per project)
@@ -68,7 +71,7 @@ Browser (React + Vite + TS)  ──WS──▶  Server (Fastify + ws)
                                        ▼
                                   Pi Agent  (pi-coding-agent + pi-ai)
                                   providers: openrouter / zai / minimax / opencode
-                                  23 tools: built-ins + cowork + doc + memory + chrome + artifact
+                                  31 tools incl. MCP connector tools (dynamic)
 ```
 
 - One `AgentSession` per user session, held server-side.
@@ -85,12 +88,17 @@ Browser (React + Vite + TS)  ──WS──▶  Server (Fastify + ws)
 | GET | `/api/providers/:id/models` | Model catalog for a provider |
 | POST | `/api/sessions` | Create a session (optional `projectId`) |
 | GET | `/api/sessions` | List sessions |
-| POST | `/api/sessions/:id/messages` | Send a prompt |
+| POST | `/api/sessions/:id/messages` | Send a prompt (handles `/` commands too) |
 | POST | `/api/sessions/:id/answers` | Answer a pending `ask_question` |
+| GET | `/api/commands` | List slash commands |
+| POST | `/api/sessions/:id/commands` | Execute a slash command |
 | GET | `/api/files/*` | Download a workspace file |
 | GET | `/api/skills` | List skills |
 | POST | `/api/skills/:file/{enable,disable}` | Enable / disable a skill in the project |
 | PUT/DELETE | `/api/skills/:file` | Install / uninstall a global skill |
+| GET/POST | `/api/connectors` | List / add MCP connectors |
+| POST | `/api/connectors/:id/{connect,disconnect}` | Connect / disconnect a connector |
+| DELETE | `/api/connectors/:id` | Remove a connector |
 | GET | `/api/artifacts[/:id]` | List / serve HTML artifacts |
 | GET/POST | `/api/tasks` | List / create scheduled tasks |
 | PATCH/DELETE | `/api/tasks/:id` | Pause / resume / delete a task |
@@ -101,12 +109,12 @@ Browser (React + Vite + TS)  ──WS──▶  Server (Fastify + ws)
 ## Testing
 
 ```bash
-npm test      # server unit tests (vitest) — 69 tests across 10 files
-npm run e2e   # playwright e2e — 9 tests
+npm test      # server unit tests (vitest) — 97 tests across 14 files
+npm run e2e   # playwright e2e — 18 tests
 npm -w web run build   # type-check + build the frontend
 ```
 
-Test coverage spans: provider key management, model catalogs, event mapping, the clarifying-question pause/resume round-trip, all document generators (docx/xlsx/pptx/pdf with magic-byte + traversal checks), memory CRUD + persistence, skills management, artifacts, scheduled tasks (including a real one-shot firing), projects, and live Chrome automation against example.com.
+Test coverage spans: provider key management, model catalogs, event mapping, the clarifying-question pause/resume round-trip, all document generators (docx/xlsx/pptx/pdf with magic-byte + traversal checks), memory CRUD + persistence, skills management, artifacts, scheduled tasks (including a real one-shot firing), projects, slash-command dispatch, MCP connector tool-adaptation, sub-agent validation, live Chrome automation against example.com, and computer-use tool structure.
 
 ## Project layout
 
@@ -114,10 +122,11 @@ Test coverage spans: provider key management, model catalogs, event mapping, the
 Pi-Cowork/
   server/          Node + Fastify + ws; embeds Pi Agent
     src/
-      pi/            engine (event mapping), providers, sessions, projects,
-                      scheduler, skills, artifacts, + cowork/doc/memory/chrome tools
+      pi/            engine, providers, sessions, projects, scheduler, skills,
+                      artifacts, mcp-connectors, commands, + cowork/doc/memory/
+                      chrome/computer-use/subagent tools
       routes/        providers, sessions, messages, files, skills, artifacts,
-                      scheduler, projects
+                      scheduler, projects, connectors, commands
       safety.ts      bash guardrails
       ws.ts          WebSocket bridge
   web/             Vite + React + TS frontend
@@ -126,13 +135,13 @@ Pi-Cowork/
       components/    MessageList, ToolCard, Composer, TaskList, QuestionCard,
                       FileChips, ArtifactPanel, ProviderSettings
       lib/           api.ts, ws.ts, events.ts
-  e2e/             Playwright smoke tests
+  e2e/             Playwright tests
   docs/superpowers/  design spec + Phase 1 implementation plan
 ```
 
 ## Status
 
-Phases 1–3 (platform, knowledge-worker, advanced) are implemented and tested, achieving feature parity with Claude Cowork's headline capabilities. Not implemented (deliberately scoped out, see the design spec): native computer-use desktop automation, desktop packaging (Electron/Tauri wrapper), and bulk replication of Cowork's 132 prebuilt skills / 131 MCP connectors (the loader + a starter set are in place; bulk content is incremental).
+Phases 1–4 are implemented and tested, achieving feature parity with Claude Cowork's full headline capability set: agentic loop + streaming, four providers, clarifying questions, task list, document creation, deliverables, memory, browser control (Chrome), computer-use (desktop automation), artifacts, sub-agents, MCP connectors, slash commands, skills, scheduled tasks, and projects. Deliberately not built: a native desktop shell (Electron/Tauri wrapper) and bulk replication of Cowork's ~132 prebuilt skills / ~131 MCP connectors (the loader infrastructure is in place; bulk content is incremental and additive).
 
 ## License
 
