@@ -3,22 +3,22 @@ import crypto from "node:crypto";
 import { config } from "../config.js";
 import { createPiSession, type PiSessionHandle } from "./engine.js";
 import { resolveModel } from "./providers.js";
+import { getProjectManager } from "./projects.js";
 import type { Model } from "@earendil-works/pi-ai";
 import type { SessionInfo } from "../event-schema.js";
 
 // Active in-memory handles keyed by sessionId.
 const handles = new Map<string, PiSessionHandle>();
 
-function defaultCwd(): string {
-  return path.join(config.dataDir, "workspaces", "default");
-}
-
 export async function createSession(opts: {
   providerId?: string;
   modelId?: string;
+  projectId?: string;
 }): Promise<{ handle: PiSessionHandle; info: SessionInfo }> {
   const id = crypto.randomUUID();
-  const cwd = defaultCwd();
+  // Resolve cwd: project workspace if projectId given, else the default project.
+  const pm = getProjectManager();
+  const cwd = opts.projectId ? pm.cwd(opts.projectId) : pm.cwd("default");
   let model: Model<any> | undefined;
   if (opts.providerId && opts.modelId) {
     model = resolveModel(opts.providerId, opts.modelId);
