@@ -15,6 +15,8 @@ Pi-Cowork gives knowledge workers a chat UI where an AI agent plans tasks, calls
 
 Keys are managed in the in-app **Settings** view or via environment variables, and stored in Pi Agent's `AuthStorage` (`~/.pi/agent/auth.json`). They never leave the server.
 
+> **Works out of the box, no key required:** Pi-Cowork ships with a keyless **OpenCode Zen** free provider (DeepSeek V4 Flash et al.) as the default model, so chat streams real responses immediately. Add any of the four keyed providers above for stronger models.
+
 ## Features (feature-parity with Cowork)
 
 **Agentic core**
@@ -110,11 +112,11 @@ Browser (React + Vite + TS)  ──WS──▶  Server (Fastify + ws)
 
 ```bash
 npm test      # server unit tests (vitest) — 97 tests across 14 files
-npm run e2e   # playwright e2e — 18 tests
+npm run e2e   # playwright e2e — 19 tests (incl. a live LLM streaming test)
 npm -w web run build   # type-check + build the frontend
 ```
 
-Test coverage spans: provider key management, model catalogs, event mapping, the clarifying-question pause/resume round-trip, all document generators (docx/xlsx/pptx/pdf with magic-byte + traversal checks), memory CRUD + persistence, skills management, artifacts, scheduled tasks (including a real one-shot firing), projects, slash-command dispatch, MCP connector tool-adaptation, sub-agent validation, live Chrome automation against example.com, and computer-use tool structure.
+Test coverage spans: provider key management, model catalogs, event mapping, the clarifying-question pause/resume round-trip, all document generators (docx/xlsx/pptx/pdf with magic-byte + traversal checks), memory CRUD + persistence, skills management, artifacts, scheduled tasks (including a real one-shot firing), projects, slash-command dispatch, MCP connector tool-adaptation, sub-agent validation, live Chrome automation against example.com, computer-use tool structure, and — crucially — **a live end-to-end test (`live-chat.spec.ts`) asserting real assistant `text_delta` tokens stream from an LLM through the WebSocket**.
 
 ## Project layout
 
