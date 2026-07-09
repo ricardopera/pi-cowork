@@ -43,4 +43,10 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ questionId, answer }),
     }),
+  resolvePermission: (id: string, permissionId: string, approved: boolean) =>
+    fetch(`${base}/api/sessions/${id}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ permissionId, approved }),
+    }),
 };

@@ -1,4 +1,10 @@
-import { createAgentSession, SessionManager, type AgentSession } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSession,
+  SessionManager,
+  DefaultResourceLoader,
+  getAgentDir,
+  type AgentSession,
+} from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import { getAuthStorage, getModelRegistry, defaultModel } from "./providers.js";
 import { createCoworkTools } from "./cowork-tools.js";
@@ -9,6 +15,7 @@ import { createArtifactTools, ARTIFACT_TOOL_NAMES } from "./artifacts.js";
 import { getMcpManager } from "./mcp-connectors.js";
 import { createSubagentTool, SUBAGENT_TOOL_NAMES } from "./subagent-tool.js";
 import { createComputerUseTools, COMPUTER_USE_TOOL_NAMES } from "./computer-use.js";
+import { classifyToolCall } from "../safety.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -30,6 +37,10 @@ export interface PiSessionHandle {
   resolveAnswer: (questionId: string, answer: string) => boolean;
   /** Whether a clarifying question is currently awaiting an answer. */
   hasPendingQuestion: () => boolean;
+  /** Resolve a pending permission request. Returns false if no pending request. */
+  resolvePermission: (permissionId: string, approved: boolean) => boolean;
+  /** Whether a permission request is currently awaiting the user. */
+  hasPendingPermission: () => boolean;
   dispose: () => void;
 }
 
@@ -111,10 +122,54 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
 
   // Pending ask_question resolvers, keyed by questionId (= toolCallId).
   const pendingQuestions = new Map<string, { resolve: (a: string) => void; reject: (e: Error) => void }>();
+  // Pending permission resolvers, keyed by permissionId (= toolCallId).
+  const pendingPermissions = new Map<string, { resolve: (approved: boolean) => void; reject: (e: Error) => void }>();
 
   const emitWire = (e: WireEvent) => {
     for (const l of listeners) l(e);
   };
+
+  // Safety guardrail extension: classifies every tool call via the Cowork-style
+  // prohibited/explicit-permission model. Denials block hard; permission-required
+  // actions block AND emit a permission_request so the UI can ask the user to
+  // approve (recorded via resolvePermission). The tool_call hook is synchronous,
+  // so we block the original call; approving surfaces as a permission_resolved
+  // event and the user/model re-attempts if desired.
+  const safetyLoader = new DefaultResourceLoader({
+    cwd,
+    agentDir: getAgentDir(),
+    extensionFactories: [
+      (pi: any) => {
+        pi.on("tool_call", (event: any) => {
+          const toolName = event.toolName ?? "unknown";
+          const decision = classifyToolCall(toolName, event.input);
+          if (decision.outcome === "deny") {
+            return { block: true, reason: decision.reason };
+          }
+          if (decision.outcome === "needs-permission") {
+            const permissionId = event.toolCallId;
+            // Track it so resolvePermission can resolve it and emit resolved.
+            pendingPermissions.set(permissionId, {
+              resolve: () => {},
+              reject: () => {},
+            });
+            emitWire({
+              type: "permission_request",
+              sessionId,
+              permissionId,
+              toolName,
+              reason: decision.reason,
+            });
+            return {
+              block: true,
+              reason: `${decision.reason} Awaiting user approval — approve in the prompt, then re-request.`,
+            };
+          }
+          return undefined;
+        });
+      },
+    ],
+  });
 
   // Cowork custom tools, wired to this session's event stream + answer resolver.
   const coworkTools = createCoworkTools({
@@ -191,6 +246,8 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       subagentTool,
       ...computerUseTools,
     ],
+    // Inject the safety tool_call hook as an inline extension.
+    resourceLoader: safetyLoader,
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd),
@@ -230,10 +287,19 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       return true;
     },
     hasPendingQuestion: () => pendingQuestions.size > 0,
+    resolvePermission: (permissionId: string, approved: boolean): boolean => {
+      const pending = pendingPermissions.get(permissionId);
+      if (!pending) return false;
+      pendingPermissions.delete(permissionId);
+      emitWire({ type: "permission_resolved", sessionId, permissionId, approved });
+      return true;
+    },
+    hasPendingPermission: () => pendingPermissions.size > 0,
     dispose: () => {
       // Reject any still-pending questions so the tool promise doesn't leak.
       for (const [, p] of pendingQuestions) p.reject(new Error("session disposed"));
       pendingQuestions.clear();
+      pendingPermissions.clear();
       unsubscribe();
       listeners.clear();
       session.dispose();

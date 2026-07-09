@@ -15,6 +15,8 @@ export type WireEvent =
   | { type: "todo_update"; sessionId: string; todos: TodoItem[] }
   | { type: "present_files"; sessionId: string; files: PresentedFile[] }
   | { type: "artifact"; sessionId: string; artifactId: string; title: string }
+  | { type: "permission_request"; sessionId: string; permissionId: string; toolName: string; reason: string }
+  | { type: "permission_resolved"; sessionId: string; permissionId: string; approved: boolean }
   | { type: "error"; sessionId: string; message: string };
 
 export interface PresentedFile {

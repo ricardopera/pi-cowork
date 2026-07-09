@@ -39,4 +39,16 @@ export async function messageRoutes(app: FastifyInstance) {
     if (!resolved) return reply.code(409).send({ error: "no pending question with that id" });
     return { ok: true };
   });
+
+  // Resolve a pending permission request (approve or deny).
+  app.post("/api/sessions/:id/permissions", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { permissionId, approved } = req.body as { permissionId: string; approved: boolean };
+    const handle = getHandle(id);
+    if (!handle) return reply.code(404).send({ error: "session not found" });
+    if (!permissionId) return reply.code(400).send({ error: "permissionId required" });
+    const resolved = handle.resolvePermission(permissionId, approved);
+    if (!resolved) return reply.code(409).send({ error: "no pending permission with that id" });
+    return { ok: true };
+  });
 }

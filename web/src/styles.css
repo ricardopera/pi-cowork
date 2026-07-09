@@ -667,3 +667,57 @@ button.ghost.small {
   background: #fff;
   min-height: 0;
 }
+
+/* Permission request card */
+.permissioncard {
+  background: var(--panel);
+  border: 1px solid #b8860b;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.permission-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #d4a017;
+  margin-bottom: 4px;
+}
+.permission-text {
+  font-size: 14px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.permission-text code {
+  background: var(--panel2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.permission-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.permission-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: inherit;
+}
+.permission-actions .approve {
+  background: #2d5a2d;
+  color: #b6f0b6;
+}
+.permission-actions .deny {
+  background: #5a2d2d;
+  color: #f0b6b6;
+}
+.permission-hint {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}

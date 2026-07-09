@@ -25,6 +25,10 @@ export type WireEvent =
   | { type: "present_files"; sessionId: string; files: PresentedFile[] }
   // live HTML artifact created (create_artifact tool)
   | { type: "artifact"; sessionId: string; artifactId: string; title: string }
+  // permission request: a tool needs explicit user approval (explicit-permission list)
+  | { type: "permission_request"; sessionId: string; permissionId: string; toolName: string; reason: string }
+  // permission resolved (approved or denied) — lets clients clear the prompt
+  | { type: "permission_resolved"; sessionId: string; permissionId: string; approved: boolean }
   // errors
   | { type: "error"; sessionId: string; message: string };
 

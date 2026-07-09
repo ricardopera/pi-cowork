@@ -68,6 +68,26 @@ test("answer endpoint 404s for unknown session", async ({ request }) => {
   expect(res.status()).toBe(404);
 });
 
+test("permission endpoint rejects when no permission is pending", async ({ request }) => {
+  const session = await (
+    await request.post("/api/sessions", { data: {} })
+  ).json();
+  const res = await request.post(`/api/sessions/${session.id}/permissions`, {
+    data: { permissionId: "p-none", approved: true },
+  });
+  expect(res.status()).toBe(409);
+});
+
+test("permission endpoint validates required fields", async ({ request }) => {
+  const session = await (
+    await request.post("/api/sessions", { data: {} })
+  ).json();
+  const res = await request.post(`/api/sessions/${session.id}/permissions`, {
+    data: {},
+  });
+  expect(res.status()).toBe(400);
+});
+
 test("file download endpoint serves workspace files and blocks traversal", async ({ request }) => {
   // Create a file in the default workspace outputs dir via the server's dataDir.
   // The workspace root is <dataDir>/workspaces/default. We can't easily write to

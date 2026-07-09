@@ -8,6 +8,7 @@ import { TaskList } from "../components/TaskList";
 import { QuestionCard, type Question } from "../components/QuestionCard";
 import { FileChips } from "../components/FileChips";
 import { ArtifactPanel, type Artifact } from "../components/ArtifactPanel";
+import { PermissionCard, type Permission } from "../components/PermissionCard";
 import type { Turn, ToolRecord } from "../components/types";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
@@ -16,6 +17,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   const [status, setStatus] = useState<string>("");
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [question, setQuestion] = useState<Question | null>(null);
+  const [permission, setPermission] = useState<Permission | null>(null);
   const [files, setFiles] = useState<PresentedFile[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [socket, setSocket] = useState<SessionSocket | null>(null);
@@ -105,6 +107,18 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       case "question_answered":
         setQuestion((q) => (q && q.questionId === e.questionId ? null : q));
         break;
+      case "permission_request":
+        setPermission({
+          permissionId: e.permissionId,
+          toolName: e.toolName,
+          reason: e.reason,
+        });
+        break;
+      case "permission_resolved":
+        setPermission((p) =>
+          p && p.permissionId === e.permissionId ? null : p,
+        );
+        break;
     }
   }, []);
 
@@ -140,6 +154,11 @@ export function ChatView({ sessionId }: { sessionId: string }) {
     setQuestion(null);
   };
 
+  const onResolvePermission = (permissionId: string, approved: boolean) => {
+    api.resolvePermission(sessionId, permissionId, approved);
+    setPermission(null);
+  };
+
   return (
     <div className="chatview">
       {artifacts.length > 0 && (
@@ -148,10 +167,16 @@ export function ChatView({ sessionId }: { sessionId: string }) {
         </div>
       )}
       <div className="chat-main">
-        {(todos.length > 0 || question || files.length > 0) && (
+        {(todos.length > 0 || question || files.length > 0 || permission) && (
           <div className="sidebarwidgets">
             {todos.length > 0 && <TaskList todos={todos} />}
             {question && <QuestionCard question={question} onAnswer={onAnswer} />}
+            {permission && (
+              <PermissionCard
+                permission={permission}
+                onResolve={onResolvePermission}
+              />
+            )}
             {files.length > 0 && <FileChips files={files} />}
           </div>
         )}
