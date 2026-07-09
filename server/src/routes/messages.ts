@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { getHandle } from "../pi/sessions.js";
+import { executeCommand } from "../pi/commands.js";
 import type { AskAnswerPayload } from "../event-schema.js";
 
 export async function messageRoutes(app: FastifyInstance) {
@@ -9,7 +10,18 @@ export async function messageRoutes(app: FastifyInstance) {
     const handle = getHandle(id);
     if (!handle) return reply.code(404).send({ error: "session not found" });
     if (!text) return reply.code(400).send({ error: "text required" });
-    // Fire and forget: events flow over WS. Errors surface via the WS stream.
+
+    // Slash commands: route through the command system. If the command injects
+    // a prompt, send that; otherwise just return the reply (no agent turn).
+    if (text.trim().startsWith("/")) {
+      const result = await executeCommand(id, text);
+      if (result.inject) {
+        handle.prompt(result.inject).catch((err) => console.error("command inject error", err));
+      }
+      return { ok: true, command: true, reply: result.reply, clear: result.clear };
+    }
+
+    // Normal message: fire and forget; events flow over WS.
     handle.prompt(text).catch((err) => {
       console.error("prompt error", err);
     });

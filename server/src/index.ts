@@ -9,10 +9,13 @@ import { skillRoutes } from "./routes/skills.js";
 import { artifactRoutes } from "./routes/artifacts.js";
 import { schedulerRoutes } from "./routes/scheduler.js";
 import { projectRoutes } from "./routes/projects.js";
+import { connectorRoutes } from "./routes/connectors.js";
+import { commandRoutes } from "./routes/commands.js";
 import { attachWebSocket } from "./ws.js";
 import { SkillsManager } from "./pi/skills.js";
 import { getScheduler } from "./pi/scheduler.js";
 import { getProjectManager } from "./pi/projects.js";
+import { getMcpManager } from "./pi/mcp-connectors.js";
 import { createPiSession } from "./pi/engine.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,9 +42,13 @@ async function main() {
   await app.register(artifactRoutes);
   await app.register(schedulerRoutes);
   await app.register(projectRoutes);
+  await app.register(connectorRoutes);
+  await app.register(commandRoutes);
 
   // Initialize projects (creates default project on first run).
   await getProjectManager().load();
+  // Load persisted MCP connector configs (start disconnected).
+  await getMcpManager().load();
 
   // Seed starter skills into the global library on first run.
   await new SkillsManager(path.join(config.dataDir, "workspaces", "default")).seedBuiltin();

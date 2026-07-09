@@ -6,6 +6,8 @@ import { createDocTools, DOC_TOOL_NAMES } from "./doc-tools.js";
 import { createMemoryTools, MEMORY_TOOL_NAMES } from "./memory-tools.js";
 import { createChromeTools, CHROME_TOOL_NAMES } from "./chrome-tools.js";
 import { createArtifactTools, ARTIFACT_TOOL_NAMES } from "./artifacts.js";
+import { getMcpManager } from "./mcp-connectors.js";
+import { createSubagentTool, SUBAGENT_TOOL_NAMES } from "./subagent-tool.js";
 import type { WireEvent } from "../event-schema.js";
 
 export interface CreatePiSessionOptions {
@@ -146,6 +148,13 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       emitWire({ type: "artifact", sessionId, artifactId, title }),
   });
 
+  // MCP connector tools (from connected MCP servers), registered dynamically.
+  const mcpTools = getMcpManager().getConnectedTools();
+  const mcpToolNames = mcpTools.map((t) => t.name);
+
+  // Sub-agent dispatch tool (concurrent in-memory sub-sessions).
+  const subagentTool = createSubagentTool();
+
   const { session } = await createAgentSession({
     cwd,
     model: opts.model,
@@ -158,6 +167,8 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       ...MEMORY_TOOL_NAMES,
       ...CHROME_TOOL_NAMES,
       ...ARTIFACT_TOOL_NAMES,
+      ...mcpToolNames,
+      ...SUBAGENT_TOOL_NAMES,
     ],
     customTools: [
       ...coworkTools,
@@ -165,6 +176,8 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       ...memoryTools,
       ...chromeTools,
       ...artifactTools,
+      ...mcpTools,
+      subagentTool,
     ],
     sessionManager: opts.inMemory
       ? SessionManager.inMemory(cwd)
