@@ -430,6 +430,69 @@ class McpConnectorManager {
         tools: [timezoneListTool()],
       });
     }
+    if (!this.connectors.has("md2html")) {
+      this.connectors.set("md2html", {
+        config: { id: "md2html", name: "Markdown->HTML (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [mdToHtmlTool()],
+      });
+    }
+    if (!this.connectors.has("html2text")) {
+      this.connectors.set("html2text", {
+        config: { id: "html2text", name: "HTML->text (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [htmlToTextTool()],
+      });
+    }
+    if (!this.connectors.has("sentiment")) {
+      this.connectors.set("sentiment", {
+        config: { id: "sentiment", name: "Sentiment (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [sentimentTool()],
+      });
+    }
+    if (!this.connectors.has("readability")) {
+      this.connectors.set("readability", {
+        config: { id: "readability", name: "Readability (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [readabilityTool()],
+      });
+    }
+    if (!this.connectors.has("grammar")) {
+      this.connectors.set("grammar", {
+        config: { id: "grammar", name: "Grammar count (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [grammarCountTool()],
+      });
+    }
+    if (!this.connectors.has("emoji")) {
+      this.connectors.set("emoji", {
+        config: { id: "emoji", name: "Emoji info (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [emojiInfoTool()],
+      });
+    }
+    if (!this.connectors.has("currency")) {
+      this.connectors.set("currency", {
+        config: { id: "currency", name: "Currency format (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [currencyFormatTool()],
+      });
+    }
+    if (!this.connectors.has("number")) {
+      this.connectors.set("number", {
+        config: { id: "number", name: "Number format (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [numberFormatTool()],
+      });
+    }
+    if (!this.connectors.has("datefmt")) {
+      this.connectors.set("datefmt", {
+        config: { id: "datefmt", name: "Date format (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [dateFormatTool()],
+      });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -1863,6 +1926,239 @@ function timezoneListTool(): ToolDefinition {
       const all = (Intl as any).supportedValuesOf?.("timeZone") ?? ["UTC", "America/New_York", "Europe/London", "Asia/Tokyo"];
       const list = (filter ? all.filter((tz: string) => tz.includes(filter)) : all).sort();
       return { content: [{ type: "text", text: `${list.length} zones:\n${list.join("\n")}` }], details: { count: list.length } };
+    },
+  });
+}
+
+// ---- markdown-to-html connector ----
+function mdToHtmlTool(): ToolDefinition {
+  return defineTool({
+    name: "md2html__convert",
+    label: "convert",
+    description: "Convert simple Markdown to HTML (headings, bold, italic, code, links, lists, paragraphs).",
+    parameters: { type: "object", properties: { markdown: { type: "string" } }, required: ["markdown"] },
+    async execute(_id, params) {
+      const { markdown } = params as { markdown: string };
+      let html = markdown
+        .escapeHtml ? markdown : markdown; // no escape helper; do inline below
+      // Process block elements line by line.
+      const lines = html.split(/\r?\n/);
+      const out: string[] = [];
+      let inList = false;
+      let inCode = false;
+      const closeList = () => { if (inList) { out.push("</ul>"); inList = false; } };
+      for (const line of lines) {
+        if (line.trim().startsWith("```")) { inCode = !inCode; out.push(inCode ? "<pre><code>" : "</code></pre>"); continue; }
+        if (inCode) { out.push(line); continue; }
+        const h = line.match(/^(#{1,6})\s+(.*)/);
+        if (h) { closeList(); const lvl = h[1].length; out.push(`<h${lvl}>${inlineMd(h[2])}</h${lvl}>`); continue; }
+        const li = line.match(/^[-*]\s+(.*)/);
+        if (li) { if (!inList) { out.push("<ul>"); inList = true; } out.push(`<li>${inlineMd(li[1])}</li>`); continue; }
+        if (line.trim() === "") { closeList(); continue; }
+        closeList();
+        out.push(`<p>${inlineMd(line)}</p>`);
+      }
+      closeList();
+      return { content: [{ type: "text", text: out.join("\n") }], details: {} };
+    },
+  });
+}
+// Inline markdown: **bold**, *italic*, `code`, [text](url)
+function inlineMd(s: string): string {
+  return s
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+// ---- html-to-text connector ----
+function htmlToTextTool(): ToolDefinition {
+  return defineTool({
+    name: "html2text__strip",
+    label: "strip",
+    description: "Strip HTML tags from text, leaving readable plain text (block elements add newlines).",
+    parameters: { type: "object", properties: { html: { type: "string" } }, required: ["html"] },
+    async execute(_id, params) {
+      const { html } = params as { html: string };
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      return { content: [{ type: "text", text }], details: { length: text.length } };
+    },
+  });
+}
+
+// ---- sentiment connector (lexicon-based) ----
+function sentimentTool(): ToolDefinition {
+  return defineTool({
+    name: "sentiment__analyze",
+    label: "analyze",
+    description: "Lexicon-based sentiment score (-1 negative to +1 positive) for English text.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const pos = new Set("good great excellent amazing wonderful happy love best perfect awesome positive beautiful brilliant fantastic nice win winning joy delighted superb outstanding".split(" "));
+      const neg = new Set("bad terrible awful horrible sad hate worst broken fail failure angry unhappy poor disgusting ugly disappointing boring pain misery negative wrong".split(" "));
+      const words = text.toLowerCase().split(/\W+/).filter(Boolean);
+      let score = 0;
+      for (const w of words) { if (pos.has(w)) score++; if (neg.has(w)) score--; }
+      const norm = words.length ? score / words.length : 0;
+      const label = norm > 0.05 ? "positive" : norm < -0.05 ? "negative" : "neutral";
+      return { content: [{ type: "text", text: `${label} (score=${norm.toFixed(3)}, raw=${score}, words=${words.length})` }], details: { score: norm, label } };
+    },
+  });
+}
+
+// ---- readability connector (Flesch reading ease) ----
+function readabilityTool(): ToolDefinition {
+  return defineTool({
+    name: "readability__score",
+    label: "score",
+    description: "Compute Flesch reading-ease score and reading level for English text.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const sentences = (text.match(/[.!?]+/g) || []).length || 1;
+      const words = text.split(/\s+/).filter(Boolean);
+      const wordCount = words.length || 1;
+      const syllables = words.reduce((sum, w) => sum + countSyllables(w), 0) || 1;
+      const score = 206.835 - 1.015 * (wordCount / sentences) - 84.6 * (syllables / wordCount);
+      const level = score >= 70 ? "easy" : score >= 50 ? "medium" : "hard";
+      return {
+        content: [{ type: "text", text: `Flesch: ${score.toFixed(1)} (${level}). ${wordCount} words, ${sentences} sentences, ${syllables} syllables.` }],
+        details: { score, level, words: wordCount, sentences, syllables },
+      };
+    },
+  });
+}
+function countSyllable(word: string): number {
+  word = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (!word) return 0;
+  const groups = word.match(/[aeiouy]+/g);
+  return Math.max(1, groups ? groups.length : 1);
+}
+function countSyllables(word: string): number { return countSyllable(word); }
+
+// ---- grammar-count connector ----
+function grammarCountTool(): ToolDefinition {
+  return defineTool({
+    name: "grammar__count",
+    label: "count",
+    description: "Count words, sentences, paragraphs, and characters in text.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const words = text.split(/\s+/).filter(Boolean).length;
+      const sentences = (text.match(/[.!?]+/g) || []).length;
+      const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim().length).length;
+      const chars = text.length;
+      return { content: [{ type: "text", text: `${words} words, ${sentences} sentences, ${paragraphs} paragraphs, ${chars} chars.` }], details: { words, sentences, paragraphs, chars } };
+    },
+  });
+}
+
+// ---- emoji-info connector ----
+function emojiInfoTool(): ToolDefinition {
+  return defineTool({
+    name: "emoji__info",
+    label: "info",
+    description: "Report info about emoji in text: count, unique set, and their Unicode code points.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const emojiRe = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}]/gu;
+      const found = text.match(emojiRe) || [];
+      const unique = [...new Set(found)];
+      const codepoints = unique.map((e) => `U+${e.codePointAt(0)!.toString(16).toUpperCase()}`);
+      return { content: [{ type: "text", text: `${found.length} emoji (${unique.length} unique): ${unique.join(" ")}\ncode points: ${codepoints.join(", ")}` }], details: { count: found.length, unique: unique.length } };
+    },
+  });
+}
+
+// ---- currency-format connector ----
+function currencyFormatTool(): ToolDefinition {
+  return defineTool({
+    name: "currency__format",
+    label: "format",
+    description: "Format a number as a currency string (default USD). Uses Intl.NumberFormat.",
+    parameters: {
+      type: "object",
+      properties: { amount: { type: "number" }, currency: { type: "string", description: "ISO 4217 code, e.g. USD, EUR, JPY. Default USD." }, locale: { type: "string", description: "e.g. en-US. Default en-US." } },
+      required: ["amount"],
+    },
+    async execute(_id, params) {
+      const { amount, currency, locale } = params as { amount: number; currency?: string; locale?: string };
+      const formatted = new Intl.NumberFormat(locale ?? "en-US", { style: "currency", currency: currency ?? "USD" }).format(amount);
+      return { content: [{ type: "text", text: formatted }], details: { formatted } };
+    },
+  });
+}
+
+// ---- number-format connector ----
+function numberFormatTool(): ToolDefinition {
+  return defineTool({
+    name: "number__format",
+    label: "format",
+    description: "Format a number with grouping, decimals, or as a percentage.",
+    parameters: {
+      type: "object",
+      properties: {
+        value: { type: "number" },
+        decimals: { type: "number", description: "Fraction digits (default 0)." },
+        style: { type: "string", enum: ["decimal", "percent", "scientific"], description: "Default decimal." },
+        locale: { type: "string" },
+      },
+      required: ["value"],
+    },
+    async execute(_id, params) {
+      const { value, decimals, style, locale } = params as { value: number; decimals?: number; style?: string; locale?: string };
+      const formatted = new Intl.NumberFormat(locale ?? "en-US", {
+        style: (style as any) ?? "decimal",
+        minimumFractionDigits: decimals ?? 0,
+        maximumFractionDigits: decimals ?? 0,
+      }).format(value);
+      return { content: [{ type: "text", text: formatted }], details: { formatted } };
+    },
+  });
+}
+
+// ---- date-format connector ----
+function dateFormatTool(): ToolDefinition {
+  return defineTool({
+    name: "datefmt__format",
+    label: "format",
+    description: "Format an ISO date string (or now) into a human-readable form, in a given timezone/locale.",
+    parameters: {
+      type: "object",
+      properties: {
+        iso: { type: "string", description: "ISO 8601 timestamp. Omit for now()." },
+        timezone: { type: "string", description: "IANA tz, default UTC." },
+        locale: { type: "string", description: "e.g. en-US. Default en-US." },
+        dateStyle: { type: "string", enum: ["full", "long", "medium", "short"] },
+        timeStyle: { type: "string", enum: ["full", "long", "medium", "short"] },
+      },
+    },
+    async execute(_id, params) {
+      const { iso, timezone, locale, dateStyle, timeStyle } = params as any;
+      const date = iso ? new Date(iso) : new Date();
+      if (isNaN(date.getTime())) return { content: [{ type: "text", text: `Invalid date: ${iso}` }], details: {}, isError: true };
+      const formatted = new Intl.DateTimeFormat(locale ?? "en-US", {
+        timeZone: timezone ?? "UTC",
+        dateStyle: dateStyle ?? "long",
+        timeStyle: timeStyle ?? "short",
+      }).format(date);
+      return { content: [{ type: "text", text: formatted }], details: { formatted } };
     },
   });
 }

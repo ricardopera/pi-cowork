@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 47 connector tools across 34 connectors", async () => {
+  it("seedDefaults exposes 56 connector tools across 43 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format",
       ]),
     );
-    expect(names.length).toBe(47);
+    expect(names.length).toBe(56);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(47);
+    expect(mgr.getToolNames().length).toBe(56);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -411,5 +411,75 @@ describe("bundled default connectors", () => {
     expect((all.content[0] as any).text).toContain("America/");
     const filt = await t.execute("tc2", { filter: "Europe" }, undefined, undefined, {} as any);
     expect((filt.content[0] as any).text).toContain("Europe/London");
+  });
+
+  it("md2html__convert renders headings and inline formatting", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "md2html__convert")!;
+    const res = await t.execute("tc1", { markdown: "# Title\n**bold** and *italic*" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("<h1>Title</h1>");
+    expect(text).toContain("<strong>bold</strong>");
+    expect(text).toContain("<em>italic</em>");
+  });
+
+  it("html2text__strip removes tags", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "html2text__strip")!;
+    const res = await t.execute("tc1", { html: "<p>Hello <b>world</b></p>" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("Hello world");
+  });
+
+  it("sentiment__analyze scores positive/negative text", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "sentiment__analyze")!;
+    const pos = await t.execute("tc1", { text: "This is great and wonderful" }, undefined, undefined, {} as any);
+    expect((pos.content[0] as any).text).toContain("positive");
+    const neg = await t.execute("tc2", { text: "This is terrible and awful" }, undefined, undefined, {} as any);
+    expect((neg.content[0] as any).text).toContain("negative");
+  });
+
+  it("readability__score returns a Flesch score", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "readability__score")!;
+    const res = await t.execute("tc1", { text: "The cat sat on the mat. It was happy." }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toMatch(/Flesch:/);
+  });
+
+  it("grammar__count counts words/sentences", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "grammar__count")!;
+    const res = await t.execute("tc1", { text: "One. Two. Three words here." }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toMatch(/5 words.*3 sentences/);
+  });
+
+  it("emoji__info finds and counts emoji", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "emoji__info")!;
+    const res = await t.execute("tc1", { text: "hi 🚀🚀🎉" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("3 emoji");
+    expect(text).toContain("2 unique");
+  });
+
+  it("currency__format formats a number as USD", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "currency__format")!;
+    const res = await t.execute("tc1", { amount: 1234.5, currency: "USD" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toMatch(/\$1,234\.50/);
+  });
+
+  it("number__format groups and rounds", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "number__format")!;
+    const res = await t.execute("tc1", { value: 1234567, decimals: 0 }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("1,234,567");
+  });
+
+  it("datefmt__format formats an ISO date", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "datefmt__format")!;
+    const res = await t.execute("tc1", { iso: "2024-01-15T10:00:00Z", timezone: "UTC" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("2024");
   });
 });
