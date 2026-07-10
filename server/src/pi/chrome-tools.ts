@@ -555,7 +555,159 @@ export function createChromeTools(deps: ChromeToolDeps): ToolDefinition[] {
   // (best-effort; runs once per context creation). We add it lazily here.
   void sessionKey; // sessionKey referenced above
 
-  return [navigate, click, type, scrape, screenshot, close, tabList, tabNew, tabSwitch, tabClose, jsExecute, formFill, waitForSelector, networkRequests, consoleMessages];
+  // ---- request interception / blocking ----
+  const blockRules: { url: string; action: "block" | "allow" }[] = [];
+  const routeRequest = defineTool({
+    name: "browser_route",
+    label: "Block or allow requests by URL pattern",
+    description:
+      "Add a request-interception rule: block or allow requests whose URL matches a substring. " +
+      "action 'block' aborts matching requests (ad/tracker blocking), 'allow' passes them. Rules " +
+      "persist for the session. Returns the active rules.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Substring to match in the request URL." },
+        action: { type: "string", enum: ["block", "allow"] },
+      },
+      required: ["url", "action"],
+    },
+    async execute(_id, params) {
+      const { url, action } = params as { url: string; action: "block" | "allow" };
+      blockRules.push({ url, action });
+      const page = await getPage(sessionKey);
+      const ctx = page.context();
+      // Re-register a single route handler that encodes all rules.
+      try {
+        await ctx.unroute("**/*").catch(() => {});
+      } catch {
+        /* unroute may no-op if nothing routed */
+      }
+      await ctx.route("**/*", (route: any) => {
+        const reqUrl = route.request().url();
+        for (const r of blockRules) {
+          if (reqUrl.includes(r.url)) {
+            return r.action === "block" ? route.abort() : route.continue();
+          }
+        }
+        return route.continue();
+      });
+      return {
+        content: [{ type: "text", text: `${blockRules.length} route rule(s) active: ${blockRules.map((r) => `${r.action}:${r.url}`).join(", ")}` }],
+        details: { rules: blockRules },
+      };
+    },
+  });
+
+  // ---- cookie management ----
+  const cookies = defineTool({
+    name: "browser_cookies",
+    label: "Get/set cookies",
+    description:
+      "Read or write cookies for the current context. action 'get' lists cookies; 'set' adds a cookie " +
+      "(requires name, value, domain); 'clear' wipes all cookies.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["get", "set", "clear"] },
+        name: { type: "string" },
+        value: { type: "string" },
+        domain: { type: "string" },
+        path: { type: "string" },
+      },
+      required: ["action"],
+    },
+    async execute(_id, params) {
+      const { action, name, value, domain, path: ckPath } = params as any;
+      const page = await getPage(sessionKey);
+      const ctx = page.context();
+      if (action === "get") {
+        const list = await ctx.cookies();
+        return { content: [{ type: "text", text: `${list.length} cookie(s):\n${list.map((c: any) => `  ${c.name}=${c.value} (${c.domain})`).join("\n")}` }], details: { count: list.length } };
+      }
+      if (action === "clear") {
+        await ctx.clearCookies();
+        return { content: [{ type: "text", text: "Cleared all cookies." }], details: {} };
+      }
+      if (action === "set") {
+        if (!name || !domain) return { content: [{ type: "text", text: "set requires name and domain." }], details: {}, isError: true };
+        await ctx.addCookies([{ name, value: value ?? "", domain, path: ckPath ?? "/", httpOnly: true, secure: false, sameSite: "Lax" } as any]);
+        return { content: [{ type: "text", text: `Set cookie ${name}=${value} for ${domain}.` }], details: {} };
+      }
+      return { content: [{ type: "text", text: `Unknown action: ${action}` }], details: {}, isError: true };
+    },
+  });
+
+  // ---- PDF export ----
+  const pdfExport = defineTool({
+    name: "browser_pdf",
+    label: "Export page as PDF",
+    description:
+      "Render the current page as a PDF and save it as a deliverable. Best for archiving or " +
+      "producing printable snapshots of a page.",
+    parameters: {
+      type: "object",
+      properties: {
+        filename: { type: "string" },
+        format: { type: "string", enum: ["A4", "Letter", "Legal"], description: "Page size (default A4)." },
+      },
+      required: ["filename"],
+    },
+    async execute(_id, params) {
+      const { filename, format } = params as { filename: string; format?: string };
+      const page = await getPage(sessionKey);
+      const outDir = path.join(deps.cwd, "outputs");
+      await fs.mkdir(outDir, { recursive: true });
+      const safe = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, "_");
+      const fullPath = path.join(outDir, safe.endsWith(".pdf") ? safe : `${safe}.pdf`);
+      try {
+        await page.pdf({ path: fullPath, format: format ?? "A4" });
+        const stat = await fs.stat(fullPath);
+        const file: PresentedFile = {
+          name: path.basename(fullPath),
+          path: path.relative(deps.cwd, fullPath),
+          format: "pdf",
+          sizeBytes: stat.size,
+        };
+        deps.emitFiles([file]);
+        return { content: [{ type: "text", text: `Exported PDF: ${file.name} (${file.sizeBytes} bytes).` }], details: { file } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `PDF export failed (page may not be ready): ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+
+  // ---- geolocation override ----
+  const geolocate = defineTool({
+    name: "browser_geolocation",
+    label: "Override geolocation",
+    description:
+      "Set the browser's geolocation override (latitude, longitude, accuracy). Subsequent pages report " +
+      "this position to geolocation APIs instead of the real location. Useful for testing location-aware sites.",
+    parameters: {
+      type: "object",
+      properties: {
+        latitude: { type: "number" },
+        longitude: { type: "number" },
+        accuracy: { type: "number" },
+      },
+      required: ["latitude", "longitude"],
+    },
+    async execute(_id, params) {
+      const { latitude, longitude, accuracy } = params as { latitude: number; longitude: number; accuracy?: number };
+      const page = await getPage(sessionKey);
+      const ctx = page.context();
+      try {
+        await ctx.setGeolocation({ latitude, longitude, accuracy: accuracy ?? 100 });
+        await ctx.grantPermissions(["geolocation"]).catch(() => {});
+        return { content: [{ type: "text", text: `Geolocation override set: (${latitude}, ${longitude}).` }], details: { latitude, longitude } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Geolocation override failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+
+  return [navigate, click, type, scrape, screenshot, close, tabList, tabNew, tabSwitch, tabClose, jsExecute, formFill, waitForSelector, networkRequests, consoleMessages, routeRequest, cookies, pdfExport, geolocate];
 }
 
 export const CHROME_TOOL_NAMES = [
@@ -574,4 +726,8 @@ export const CHROME_TOOL_NAMES = [
   "browser_wait_for",
   "browser_network",
   "browser_console",
+  "browser_route",
+  "browser_cookies",
+  "browser_pdf",
+  "browser_geolocation",
 ];

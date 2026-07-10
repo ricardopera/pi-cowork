@@ -517,7 +517,198 @@ export function createComputerUseTools(deps: ComputerUseDeps): ToolDefinition[] 
     },
   });
 
-  return [screenshot, mouseMove, click, drag, scroll, scrollBy, type, key, keyCombo, modifierClick, clipboardRead, clipboardWrite, waitFor, captureRegions];
+  // ---- window management ----
+  const windowList = defineTool({
+    name: "computer_window_list",
+    label: "List open windows",
+    description: "List all open desktop windows (title + position/size). Use to identify targets.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const nut = await getNut();
+      try {
+        const wins = await nut.getWindows();
+        const out: any[] = [];
+        for (const w of wins) {
+          const [region, title] = await Promise.all([
+            w.region().catch(() => null),
+            w.title().catch(() => ""),
+          ]);
+          out.push({
+            title,
+            x: region?.left ?? 0,
+            y: region?.top ?? 0,
+            width: region?.width ?? 0,
+            height: region?.height ?? 0,
+          });
+        }
+        return {
+          content: [{ type: "text", text: `${out.length} window(s):\n${out.map((w) => `  "${w.title}" at (${w.x},${w.y}) ${w.width}x${w.height}`).join("\n")}` }],
+          details: { count: out.length },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Window enumeration failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+
+  const windowFocus = defineTool({
+    name: "computer_window_focus",
+    label: "Focus a window",
+    description: "Bring a window to the front by index (from computer_window_list) or title substring.",
+    parameters: {
+      type: "object",
+      properties: {
+        index: { type: "number", description: "Window index from computer_window_list." },
+        titleContains: { type: "string", description: "Focus the first window whose title contains this." },
+      },
+    },
+    async execute(_id, params) {
+      const { index, titleContains } = params as { index?: number; titleContains?: string };
+      const nut = await getNut();
+      const wins = await nut.getWindows();
+      let target: any = null;
+      if (typeof index === "number") target = wins[index];
+      else if (titleContains) {
+        for (const w of wins) {
+          const t = await w.title().catch(() => "");
+          if (t.includes(titleContains)) { target = w; break; }
+        }
+      }
+      if (!target) return { content: [{ type: "text", text: "No matching window." }], details: {}, isError: true };
+      await target.focus();
+      return { content: [{ type: "text", text: `Focused window.` }], details: {} };
+    },
+  });
+
+  // ---- OCR text extraction ----
+  const ocr = defineTool({
+    name: "computer_ocr",
+    label: "Extract text from screen (OCR)",
+    description:
+      "Capture a screen region and run OCR to extract readable text. Useful for reading " +
+      "text in apps/screenshots that can't be scraped via the DOM. Requires `tesseract` " +
+      "on the host PATH. region: {x,y,width,height} optional (default full screen).",
+    parameters: {
+      type: "object",
+      properties: {
+        region: {
+          type: "object",
+          properties: { x: { type: "number" }, y: { type: "number" }, width: { type: "number" }, height: { type: "number" } },
+        },
+      },
+    },
+    async execute(_id, params) {
+      const { region } = params as { region?: { x: number; y: number; width: number; height: number } };
+      const nut = await getNut();
+      const outDir = path.join(deps.cwd, "outputs");
+      await fs.mkdir(outDir, { recursive: true });
+      const shot = region
+        ? await nut.screen.capture(new nut.Region(region.x, region.y, region.width, region.height))
+        : await nut.screen.capture();
+      const imgPath = path.join(outDir, `ocr-${Date.now()}.png`);
+      await shot.toFile(imgPath);
+      // Use tesseract if available; report clearly if not.
+      const { execFile } = await import("node:child_process");
+      const text = await new Promise<string>((resolve) => {
+        execFile("tesseract", [imgPath, "stdout", "-l", "eng"], { timeout: 30000 }, (err, stdout) => {
+          if (err) resolve(`(tesseract unavailable or failed: ${(err as any)?.message ?? err})`);
+          else resolve(stdout.trim());
+        });
+      });
+      await fs.rm(imgPath, { force: true });
+      return { content: [{ type: "text", text: text || "(no text detected)" }], details: { length: text.length } };
+    },
+  });
+
+  // ---- color picking ----
+  const colorPick = defineTool({
+    name: "computer_color_pick",
+    label: "Pick pixel color",
+    description: "Sample the RGB color of a single pixel at screen coordinates (x, y).",
+    parameters: {
+      type: "object",
+      properties: { x: { type: "number" }, y: { type: "number" } },
+      required: ["x", "y"],
+    },
+    async execute(_id, params) {
+      const { x, y } = params as { x: number; y: number };
+      const nut = await getNut();
+      try {
+        const color = await nut.screen.colorAt(new nut.Point(x, y));
+        return {
+          content: [{ type: "text", text: `Pixel (${x}, ${y}) color: rgba(${color.R}, ${color.G}, ${color.B}, ${color.A})` }],
+          details: { r: color.R, g: color.G, b: color.B, a: color.A },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Color pick failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+
+  // ---- file open / save dialogs (open via xdg-open, save via path prompt) ----
+  const fileOpen = defineTool({
+    name: "computer_open_file",
+    label: "Open a file with its default app",
+    description:
+      "Open a file or URL using the system default application (xdg-open). Use to let the " +
+      "user view a deliverable in their native app, or open a URL in the default browser.",
+    parameters: {
+      type: "object",
+      properties: { target: { type: "string", description: "Absolute file path or URL." } },
+      required: ["target"],
+    },
+    async execute(_id, params) {
+      const { target } = params as { target: string };
+      const { execFile } = await import("node:child_process");
+      await new Promise<void>((resolve) => {
+        execFile("xdg-open", [target], { timeout: 10000 }, () => resolve());
+      });
+      return { content: [{ type: "text", text: `Opened ${target}.` }], details: { target } };
+    },
+  });
+
+  // ---- system notification ----
+  const notify = defineTool({
+    name: "computer_notify",
+    label: "Send a system notification",
+    description: "Show a desktop notification (title + body) via notify-send.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        body: { type: "string" },
+      },
+      required: ["title"],
+    },
+    async execute(_id, params) {
+      const { title, body } = params as { title: string; body?: string };
+      const { execFile } = await import("node:child_process");
+      const args = body ? [title, body] : [title];
+      await new Promise<void>((resolve) => {
+        execFile("notify-send", args, { timeout: 5000 }, () => resolve());
+      });
+      return { content: [{ type: "text", text: `Sent notification: ${title}.` }], details: { title } };
+    },
+  });
+
+  // ---- display resolution query ----
+  const displayInfo = defineTool({
+    name: "computer_display_info",
+    label: "Query display resolution",
+    description: "Return the primary display's width and height in pixels.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const nut = await getNut();
+      const width = await nut.screen.width();
+      const height = await nut.screen.height();
+      return {
+        content: [{ type: "text", text: `Display: ${width}x${height}px.` }],
+        details: { width, height },
+      };
+    },
+  });
+
+  return [screenshot, mouseMove, click, drag, scroll, scrollBy, type, key, keyCombo, modifierClick, clipboardRead, clipboardWrite, waitFor, captureRegions, windowList, windowFocus, ocr, colorPick, fileOpen, notify, displayInfo];
 }
 
 export const COMPUTER_USE_TOOL_NAMES = [
@@ -535,5 +726,12 @@ export const COMPUTER_USE_TOOL_NAMES = [
   "computer_clipboard_write",
   "computer_wait",
   "computer_capture_regions",
+  "computer_window_list",
+  "computer_window_focus",
+  "computer_ocr",
+  "computer_color_pick",
+  "computer_open_file",
+  "computer_notify",
+  "computer_display_info",
 ];
 

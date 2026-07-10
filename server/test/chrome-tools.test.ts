@@ -52,12 +52,38 @@ describe.skipIf(SKIP)("chrome tools", () => {
         "browser_wait_for",
         "browser_network",
         "browser_console",
+        "browser_route",
+        "browser_cookies",
+        "browser_pdf",
+        "browser_geolocation",
       ]),
     );
   });
 
-  it("creates 15 chrome tools", () => {
-    expect(tools().length).toBe(15);
+  it("creates 19 chrome tools", () => {
+    expect(tools().length).toBe(19);
+  });
+
+  it("route requires url + action", () => {
+    const schema = byName(tools(), "browser_route").parameters as any;
+    expect(schema.required).toEqual(["url", "action"]);
+    expect(schema.properties.action.enum).toEqual(["block", "allow"]);
+  });
+
+  it("cookies requires an action", () => {
+    const schema = byName(tools(), "browser_cookies").parameters as any;
+    expect(schema.required).toEqual(["action"]);
+    expect(schema.properties.action.enum).toEqual(["get", "set", "clear"]);
+  });
+
+  it("pdf requires a filename", () => {
+    const schema = byName(tools(), "browser_pdf").parameters as any;
+    expect(schema.required).toEqual(["filename"]);
+  });
+
+  it("geolocation requires latitude + longitude", () => {
+    const schema = byName(tools(), "browser_geolocation").parameters as any;
+    expect(schema.required).toEqual(["latitude", "longitude"]);
   });
 
   it("js_execute requires a script", () => {

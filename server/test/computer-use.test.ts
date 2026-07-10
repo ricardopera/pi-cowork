@@ -34,13 +34,20 @@ describe("computer-use tools", () => {
         "computer_clipboard_write",
         "computer_wait",
         "computer_capture_regions",
+        "computer_window_list",
+        "computer_window_focus",
+        "computer_ocr",
+        "computer_color_pick",
+        "computer_open_file",
+        "computer_notify",
+        "computer_display_info",
       ]),
     );
   });
 
-  it("creates 14 tools with metadata", () => {
+  it("creates 21 tools with metadata", () => {
     const t = tools();
-    expect(t.length).toBe(14);
+    expect(t.length).toBe(21);
     for (const tool of t) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();
@@ -71,6 +78,38 @@ describe("computer-use tools", () => {
   it("capture_regions requires prefix and regions", () => {
     const schema = byName(tools(), "computer_capture_regions").parameters as any;
     expect(schema.required).toEqual(expect.arrayContaining(["prefix", "regions"]));
+  });
+
+  it("window_focus accepts index or titleContains", () => {
+    const schema = byName(tools(), "computer_window_focus").parameters as any;
+    expect(schema.properties.index).toBeTruthy();
+    expect(schema.properties.titleContains).toBeTruthy();
+  });
+
+  it("color_pick requires x and y", () => {
+    const schema = byName(tools(), "computer_color_pick").parameters as any;
+    expect(schema.required).toEqual(["x", "y"]);
+  });
+
+  it("open_file requires a target", () => {
+    const schema = byName(tools(), "computer_open_file").parameters as any;
+    expect(schema.required).toEqual(["target"]);
+  });
+
+  it("notify requires a title", () => {
+    const schema = byName(tools(), "computer_notify").parameters as any;
+    expect(schema.required).toEqual(["title"]);
+  });
+
+  it("display_info takes no required params", () => {
+    const schema = byName(tools(), "computer_display_info").parameters as any;
+    expect(schema.required ?? []).toEqual([]);
+  });
+
+  it("ocr optionally takes a region", () => {
+    const schema = byName(tools(), "computer_ocr").parameters as any;
+    expect(schema.properties.region).toBeTruthy();
+    expect(schema.required ?? []).toEqual([]);
   });
 
   it("mouse_move requires x and y", () => {
