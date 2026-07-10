@@ -901,6 +901,51 @@ class McpConnectorManager {
     if (!this.connectors.has("textreplace")) {
       this.connectors.set("textreplace", { config: { id: "textreplace", name: "Text replace (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [textReplaceTool()] });
     }
+    if (!this.connectors.has("texttrim")) {
+      this.connectors.set("texttrim", { config: { id: "texttrim", name: "Text trim (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [textTrimTool()] });
+    }
+    if (!this.connectors.has("textsplit")) {
+      this.connectors.set("textsplit", { config: { id: "textsplit", name: "Text split (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [textSplitTool()] });
+    }
+    if (!this.connectors.has("lineprefix")) {
+      this.connectors.set("lineprefix", { config: { id: "lineprefix", name: "Line prefix (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [linePrefixTool()] });
+    }
+    if (!this.connectors.has("linesuffix")) {
+      this.connectors.set("linesuffix", { config: { id: "linesuffix", name: "Line suffix (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [lineSuffixTool()] });
+    }
+    if (!this.connectors.has("indent")) {
+      this.connectors.set("indent", { config: { id: "indent", name: "Indent (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [indentTool()] });
+    }
+    if (!this.connectors.has("comment")) {
+      this.connectors.set("comment", { config: { id: "comment", name: "Comment (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [commentTool()] });
+    }
+    if (!this.connectors.has("fence")) {
+      this.connectors.set("fence", { config: { id: "fence", name: "Code fence (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [fenceTool()] });
+    }
+    if (!this.connectors.has("countdown")) {
+      this.connectors.set("countdown", { config: { id: "countdown", name: "Countdown (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [countdownTool()] });
+    }
+    if (!this.connectors.has("seq")) {
+      this.connectors.set("seq", { config: { id: "seq", name: "Sequence (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [sequenceTool()] });
+    }
+    if (!this.connectors.has("between")) {
+      this.connectors.set("between", { config: { id: "between", name: "Extract between (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [extractBetweenTool()] });
+    }
+    if (!this.connectors.has("urlencode")) {
+      this.connectors.set("urlencode", { config: { id: "urlencode", name: "URL encode (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [urlEncodeTool()] });
+    }
+    if (!this.connectors.has("urldecode")) {
+      this.connectors.set("urldecode", { config: { id: "urldecode", name: "URL decode (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [urlDecodeTool()] });
+    }
+    if (!this.connectors.has("htmlesc")) {
+      this.connectors.set("htmlesc", { config: { id: "htmlesc", name: "HTML escape (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [htmlEscapeTool()] });
+    }
+    if (!this.connectors.has("htmlunesc")) {
+      this.connectors.set("htmlunesc", { config: { id: "htmlunesc", name: "HTML unescape (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [htmlUnescapeTool()] });
+    }
+    if (!this.connectors.has("timestamp")) {
+      this.connectors.set("timestamp", { config: { id: "timestamp", name: "Timestamp (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [timestampTool()] });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -3793,4 +3838,65 @@ function textFindTool(): ToolDefinition {
 function textReplaceTool(): ToolDefinition {
   return defineTool({ name: "textreplace__replace", label: "replace", description: "Replace all occurrences of a pattern in text.", parameters: { type: "object", properties: { text: { type: "string" }, from: { type: "string" }, to: { type: "string" } }, required: ["text", "from", "to"] },
     async execute(_id, params) { const {text,from,to}=params as any; const out=text.split(from).join(to); return { content: [{ type: "text", text: out }], details: { replacements: text.split(from).length-1 } }; } });
+}
+
+function textTrimTool(): ToolDefinition {
+  return defineTool({ name: "texttrim__trim", label: "trim", description: "Trim whitespace from each line (or just start/end of text).", parameters: { type: "object", properties: { text: { type: "string" }, mode: { type: "string", enum: ["each", "whole"], description: "Default 'each'." } }, required: ["text"] },
+    async execute(_id, params) { const { text, mode } = params as any; const out = mode === "whole" ? text.trim() : text.split(/\r?\n/).map((l: string) => l.trim()).join("\n"); return { content: [{ type: "text", text: out }] }; } });
+}
+function textSplitTool(): ToolDefinition {
+  return defineTool({ name: "textsplit__split", label: "split", description: "Split text by a delimiter into numbered lines.", parameters: { type: "object", properties: { text: { type: "string" }, delimiter: { type: "string" } }, required: ["text", "delimiter"] },
+    async execute(_id, params) { const { text, delimiter } = params as any; const parts = text.split(delimiter); return { content: [{ type: "text", text: parts.map((p: string, i: number) => `${i + 1}. ${p}`).join("\n") }], details: { count: parts.length } }; } });
+}
+function linePrefixTool(): ToolDefinition {
+  return defineTool({ name: "lineprefix__add", label: "add", description: "Add a prefix to every line.", parameters: { type: "object", properties: { text: { type: "string" }, prefix: { type: "string" } }, required: ["text", "prefix"] },
+    async execute(_id, params) { const { text, prefix } = params as any; return { content: [{ type: "text", text: text.split(/\r?\n/).map((l: string) => prefix + l).join("\n") }] }; } });
+}
+function lineSuffixTool(): ToolDefinition {
+  return defineTool({ name: "linesuffix__add", label: "add", description: "Add a suffix to every line.", parameters: { type: "object", properties: { text: { type: "string" }, suffix: { type: "string" } }, required: ["text", "suffix"] },
+    async execute(_id, params) { const { text, suffix } = params as any; return { content: [{ type: "text", text: text.split(/\r?\n/).map((l: string) => l + suffix).join("\n") }] }; } });
+}
+function indentTool(): ToolDefinition {
+  return defineTool({ name: "indent__add", label: "add", description: "Indent each line by N spaces.", parameters: { type: "object", properties: { text: { type: "string" }, spaces: { type: "number" } }, required: ["text", "spaces"] },
+    async execute(_id, params) { const { text, spaces } = params as any; const pad = " ".repeat(Math.max(0, spaces)); return { content: [{ type: "text", text: text.split(/\r?\n/).map((l: string) => pad + l).join("\n") }] }; } });
+}
+function commentTool(): ToolDefinition {
+  return defineTool({ name: "comment__add", label: "add", description: "Comment out lines using a language's comment syntax.", parameters: { type: "object", properties: { text: { type: "string" }, syntax: { type: "string", enum: ["//", "#", "--", "<!--", "/*"] } }, required: ["text", "syntax"] },
+    async execute(_id, params) { const { text, syntax } = params as any; const out = text.split(/\r?\n/).map((l: string) => syntax === "/*" ? `/* ${l} */` : syntax === "<!--" ? `<!-- ${l} -->` : `${syntax} ${l}`).join("\n"); return { content: [{ type: "text", text: out }] }; } });
+}
+function fenceTool(): ToolDefinition {
+  return defineTool({ name: "fence__wrap", label: "wrap", description: "Wrap text in a Markdown code fence with optional language.", parameters: { type: "object", properties: { text: { type: "string" }, language: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) { const { text, language } = params as any; return { content: [{ type: "text", text: "```" + (language ?? "") + "\n" + text + "\n```" }] }; } });
+}
+function countdownTool(): ToolDefinition {
+  return defineTool({ name: "countdown__from", label: "from", description: "Count down from N to 1.", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+    async execute(_id, params) { const n = Math.min(1000, (params as any).n); return { content: [{ type: "text", text: Array.from({ length: n }, (_, i) => n - i).join("\n") }] }; } });
+}
+function sequenceTool(): ToolDefinition {
+  return defineTool({ name: "seq__range", label: "range", description: "Generate a sequence from start to end (inclusive) with step.", parameters: { type: "object", properties: { start: { type: "number" }, end: { type: "number" }, step: { type: "number" } }, required: ["start", "end"] },
+    async execute(_id, params) { const { start, end, step } = params as any; const s = step ?? 1; const nums: number[] = []; if (s > 0) for (let i = start; i <= end; i += s) nums.push(i); else for (let i = start; i >= end; i += s) nums.push(i); return { content: [{ type: "text", text: nums.join(", ") }], details: { count: nums.length } }; } });
+}
+function extractBetweenTool(): ToolDefinition {
+  return defineTool({ name: "between__extract", label: "extract", description: "Extract all text between two delimiters.", parameters: { type: "object", properties: { text: { type: "string" }, start: { type: "string" }, end: { type: "string" } }, required: ["text", "start", "end"] },
+    async execute(_id, params) { const { text, start, end } = params as any; const re = new RegExp(start.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([\\s\\S]*?)" + end.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"); const matches: string[] = []; let m: RegExpExecArray | null; while ((m = re.exec(text)) !== null) matches.push(m[1].trim()); return { content: [{ type: "text", text: matches.length ? matches.join("\n---\n") : "(none found)" }], details: { count: matches.length } }; } });
+}
+function urlEncodeTool(): ToolDefinition {
+  return defineTool({ name: "urlencode__encode", label: "encode", description: "URL-encode a string (percent-encoding).", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) { return { content: [{ type: "text", text: encodeURIComponent((params as any).text) }] }; } });
+}
+function urlDecodeTool(): ToolDefinition {
+  return defineTool({ name: "urldecode__decode", label: "decode", description: "URL-decode a percent-encoded string.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) { return { content: [{ type: "text", text: decodeURIComponent((params as any).text) }] }; } });
+}
+function htmlEscapeTool(): ToolDefinition {
+  return defineTool({ name: "htmlesc__escape", label: "escape", description: "Escape HTML special characters (&, <, >, quotes).", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) { const t = (params as any).text; return { content: [{ type: "text", text: t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;") }] }; } });
+}
+function htmlUnescapeTool(): ToolDefinition {
+  return defineTool({ name: "htmlunesc__unescape", label: "unescape", description: "Unescape HTML entities back to characters.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) { const t = (params as any).text; return { content: [{ type: "text", text: t.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'") }] }; } });
+}
+function timestampTool(): ToolDefinition {
+  return defineTool({ name: "timestamp__convert", label: "convert", description: "Convert a Unix timestamp to ISO date (or vice versa). Auto-detects direction.", parameters: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+    async execute(_id, params) { const v = (params as any).value; if (/^\d{10}$/.test(v)) { const d = new Date(Number(v) * 1000); return { content: [{ type: "text", text: `${v} -> ${d.toISOString()}` }] }; } if (/^\d{13}$/.test(v)) { const d = new Date(Number(v)); return { content: [{ type: "text", text: `${v} -> ${d.toISOString()}` }] }; } const d = new Date(v); if (isNaN(d.getTime())) return { content: [{ type: "text", text: "Invalid input." }], isError: true }; return { content: [{ type: "text", text: `${d.toISOString()} -> unix=${Math.floor(d.getTime() / 1000)} ms=${d.getTime()}` }] }; } });
 }
