@@ -21,13 +21,18 @@ describe("bundled default connectors", () => {
     await mgr.seedDefaults();
     const list = mgr.list();
     const ids = list.map((c) => c.id);
-    expect(ids).toEqual(expect.arrayContaining(["fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash"]));
-    for (const id of ["fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash"]) {
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
+        "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
+      ]),
+    );
+    for (const id of ids) {
       expect(list.find((c) => c.id === id)?.status).toBe("connected");
     }
   });
 
-  it("seedDefaults exposes 14 connector tools across 8 connectors", async () => {
+  it("seedDefaults exposes 26 connector tools across 17 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -38,17 +43,25 @@ describe("bundled default connectors", () => {
         "calc__eval", "calc__stats",
         "sqlite__query",
         "git__status", "git__log", "git__diff",
-        "env__get",
-        "hash__checksum",
+        "env__get", "hash__checksum",
+        "csv__parse", "csv__stringify",
+        "json__format", "json__query",
+        "md__table",
+        "http__headers",
+        "base64__encode", "base64__decode",
+        "uuid__generate",
+        "diff__lines",
+        "archive__zip",
+        "qr__text",
       ]),
     );
-    expect(names.length).toBe(14);
+    expect(names.length).toBe(26);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(14);
+    expect(mgr.getToolNames().length).toBe(26);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -151,5 +164,86 @@ describe("bundled default connectors", () => {
     const read = mgr.getConnectedTools().find((t) => t.name === "fs__read_file")!;
     const res = await read.execute("tc1", { path: path.join(tmp, "nope.txt") }, undefined, undefined, {} as any);
     expect(res.isError).toBe(true);
+  });
+
+  it("csv__parse parses CSV to objects, csv__stringify round-trips", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const parse = tools.find((t) => t.name === "csv__parse")!;
+    const stringify = tools.find((t) => t.name === "csv__stringify")!;
+    const res = await parse.execute("tc1", { csv: "name,age\nAda,36\nAlan,41" }, undefined, undefined, {} as any);
+    expect(JSON.parse((res.content[0] as any).text)).toEqual([
+      { name: "Ada", age: "36" },
+      { name: "Alan", age: "41" },
+    ]);
+    const out = await stringify.execute("tc2", { rows: [{ a: "1", b: "2" }] }, undefined, undefined, {} as any);
+    expect((out.content[0] as any).text).toContain("a,b");
+  });
+
+  it("json__format pretty-prints and validates", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "json__format")!;
+    const ok = await t.execute("tc1", { json: '{"a":1}' }, undefined, undefined, {} as any);
+    expect((ok.content[0] as any).text).toContain('"a": 1');
+    const bad = await t.execute("tc2", { json: "{not json" }, undefined, undefined, {} as any);
+    expect(bad.isError).toBe(true);
+  });
+
+  it("md__table renders a markdown table", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "md__table")!;
+    const res = await t.execute("tc1", { rows: [{ x: "1", y: "2" }, { x: "3", y: "4" }] }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("| x | y |");
+    expect(text).toContain("| --- |");
+  });
+
+  it("base64 encode/decode round-trips", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const enc = tools.find((x) => x.name === "base64__encode")!;
+    const dec = tools.find((x) => x.name === "base64__decode")!;
+    const e = await enc.execute("tc1", { input: "Pi-Cowork" }, undefined, undefined, {} as any);
+    const d = await dec.execute("tc2", { input: (e.content[0] as any).text }, undefined, undefined, {} as any);
+    expect((d.content[0] as any).text).toBe("Pi-Cowork");
+  });
+
+  it("uuid__generate produces valid UUIDs", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "uuid__generate")!;
+    const res = await t.execute("tc1", { count: 3 }, undefined, undefined, {} as any);
+    const ids = (res.content[0] as any).text.split("\n");
+    expect(ids).toHaveLength(3);
+    for (const id of ids) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
+  it("diff__lines shows added/removed lines", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "diff__lines")!;
+    const res = await t.execute("tc1", { a: "a\nb\nc", b: "a\nx\nc" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("-b");
+    expect(text).toContain("+x");
+  });
+
+  it("http__headers fetches headers (live)", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "http__headers")!;
+    const res = await t.execute("tc1", { url: "https://example.com" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toMatch(/HTTP \d+/);
+  }, 20000);
+
+  it("json__query navigates a dotted path", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "json__query")!;
+    const res = await t.execute("tc1", { json: '{"users":[{"name":"Ada"}]}', path: "users.0.name" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text.trim()).toBe('"Ada"');
+  });
+
+  it("qr__text returns a payload-labelled rendering", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "qr__text")!;
+    const res = await t.execute("tc1", { text: "https://pi-cowork.example" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("https://pi-cowork.example");
   });
 });

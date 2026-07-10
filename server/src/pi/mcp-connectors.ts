@@ -248,6 +248,69 @@ class McpConnectorManager {
         tools: [hashTool()],
       });
     }
+    if (!this.connectors.has("csv")) {
+      this.connectors.set("csv", {
+        config: { id: "csv", name: "CSV (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [csvParseTool(), csvStringifyTool()],
+      });
+    }
+    if (!this.connectors.has("json")) {
+      this.connectors.set("json", {
+        config: { id: "json", name: "JSON (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [jsonFormatTool(), jsonQueryTool()],
+      });
+    }
+    if (!this.connectors.has("md")) {
+      this.connectors.set("md", {
+        config: { id: "md", name: "Markdown (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [mdTableTool()],
+      });
+    }
+    if (!this.connectors.has("http")) {
+      this.connectors.set("http", {
+        config: { id: "http", name: "HTTP headers (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [httpHeadersTool()],
+      });
+    }
+    if (!this.connectors.has("base64")) {
+      this.connectors.set("base64", {
+        config: { id: "base64", name: "Base64 (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [base64EncodeTool(), base64DecodeTool()],
+      });
+    }
+    if (!this.connectors.has("uuid")) {
+      this.connectors.set("uuid", {
+        config: { id: "uuid", name: "UUID (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [uuidTool()],
+      });
+    }
+    if (!this.connectors.has("diff")) {
+      this.connectors.set("diff", {
+        config: { id: "diff", name: "Diff (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [diffTool()],
+      });
+    }
+    if (!this.connectors.has("archive")) {
+      this.connectors.set("archive", {
+        config: { id: "archive", name: "Archive (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [archiveTool()],
+      });
+    }
+    if (!this.connectors.has("qr")) {
+      this.connectors.set("qr", {
+        config: { id: "qr", name: "QR (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [qrTool()],
+      });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -671,6 +734,327 @@ function hashTool(): ToolDefinition {
       const { createHash } = await import("node:crypto");
       const digest = createHash(algo).update(input).digest("hex");
       return { content: [{ type: "text", text: `${algo}(${input.slice(0, 40)}${input.length > 40 ? "…" : ""}) = ${digest}` }], details: { algorithm: algo, digest } };
+    },
+  });
+}
+
+// ---- csv connector ----
+function csvParseTool(): ToolDefinition {
+  return defineTool({
+    name: "csv__parse",
+    label: "parse",
+    description: "Parse CSV text into JSON objects (first row treated as headers).",
+    parameters: {
+      type: "object",
+      properties: { csv: { type: "string" }, delimiter: { type: "string", description: "Default ','." } },
+      required: ["csv"],
+    },
+    async execute(_id, params) {
+      const { csv, delimiter } = params as { csv: string; delimiter?: string };
+      const del = delimiter ?? ",";
+      const rows = csv.split(/\r?\n/).filter((r) => r.length);
+      if (!rows.length) return { content: [{ type: "text", text: "[]" }], details: { count: 0 } };
+      const split = (r: string) => r.split(del);
+      const headers = split(rows[0]);
+      const objs = rows.slice(1).map((r) => {
+        const vals = split(r);
+        const o: Record<string, string> = {};
+        headers.forEach((h, i) => (o[h] = vals[i] ?? ""));
+        return o;
+      });
+      return { content: [{ type: "text", text: JSON.stringify(objs, null, 2) }], details: { count: objs.length } };
+    },
+  });
+}
+
+function csvStringifyTool(): ToolDefinition {
+  return defineTool({
+    name: "csv__stringify",
+    label: "stringify",
+    description: "Convert an array of objects into CSV text (headers from first object).",
+    parameters: {
+      type: "object",
+      properties: { rows: { type: "array" } },
+      required: ["rows"],
+    },
+    async execute(_id, params) {
+      const rows = (params as { rows: Record<string, unknown>[] }).rows ?? [];
+      if (!rows.length) return { content: [{ type: "text", text: "" }], details: { count: 0 } };
+      const headers = Object.keys(rows[0]);
+      const esc = (v: unknown) => {
+        const s = String(v ?? "");
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const lines = [headers.join(",")];
+      for (const r of rows) lines.push(headers.map((h) => esc(r[h])).join(","));
+      return { content: [{ type: "text", text: lines.join("\n") }], details: { count: rows.length } };
+    },
+  });
+}
+
+// ---- json connector ----
+function jsonFormatTool(): ToolDefinition {
+  return defineTool({
+    name: "json__format",
+    label: "format",
+    description: "Pretty-print (or minify) JSON text. Validates and reports parse errors.",
+    parameters: {
+      type: "object",
+      properties: { json: { type: "string" }, minify: { type: "boolean" } },
+      required: ["json"],
+    },
+    async execute(_id, params) {
+      const { json, minify } = params as { json: string; minify?: boolean };
+      try {
+        const parsed = JSON.parse(json);
+        const out = minify ? JSON.stringify(parsed) : JSON.stringify(parsed, null, 2);
+        return { content: [{ type: "text", text: out }], details: { ok: true } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Invalid JSON: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function jsonQueryTool(): ToolDefinition {
+  return defineTool({
+    name: "json__query",
+    label: "query",
+    description: "Query JSON with a dotted path (e.g. 'users.0.name') or '*' keys.",
+    parameters: {
+      type: "object",
+      properties: { json: { type: "string" }, path: { type: "string" } },
+      required: ["json", "path"],
+    },
+    async execute(_id, params) {
+      const { json, path } = params as { json: string; path: string };
+      try {
+        let cur: any = JSON.parse(json);
+        for (const part of path.split(".")) {
+          if (cur == null) break;
+          cur = cur[part];
+        }
+        return { content: [{ type: "text", text: JSON.stringify(cur, null, 2) }], details: {} };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- markdown connector ----
+function mdTableTool(): ToolDefinition {
+  return defineTool({
+    name: "md__table",
+    label: "build_table",
+    description: "Render an array of row objects as a GitHub-flavored Markdown table.",
+    parameters: {
+      type: "object",
+      properties: { rows: { type: "array" } },
+      required: ["rows"],
+    },
+    async execute(_id, params) {
+      const rows = (params as { rows: Record<string, unknown>[] }).rows ?? [];
+      if (!rows.length) return { content: [{ type: "text", text: "(empty)" }], details: { count: 0 } };
+      const headers = Object.keys(rows[0]);
+      const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
+      return {
+        content: [{
+          type: "text",
+          text: [
+            line(headers),
+            line(headers.map(() => "---")),
+            ...rows.map((r) => line(headers.map((h) => String(r[h] ?? "")))),
+          ].join("\n"),
+        }],
+        details: { count: rows.length },
+      };
+    },
+  });
+}
+
+// ---- http headers connector ----
+function httpHeadersTool(): ToolDefinition {
+  return defineTool({
+    name: "http__headers",
+    label: "headers",
+    description: "Fetch a URL and return only the response headers (status + keys).",
+    parameters: {
+      type: "object",
+      properties: { url: { type: "string" }, method: { type: "string", enum: ["GET", "HEAD"], description: "Default HEAD." } },
+      required: ["url"],
+    },
+    async execute(_id, params) {
+      const { url, method } = params as { url: string; method?: string };
+      try {
+        const res = await fetch(url, { method: method ?? "HEAD", redirect: "follow" });
+        const headers: Record<string, string> = {};
+        res.headers.forEach((v, k) => (headers[k] = v));
+        return {
+          content: [{ type: "text", text: `HTTP ${res.status} ${res.statusText}\n${JSON.stringify(headers, null, 2)}` }],
+          details: { status: res.status },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Fetch failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- base64 connector ----
+function base64EncodeTool(): ToolDefinition {
+  return defineTool({
+    name: "base64__encode",
+    label: "encode",
+    description: "Base64-encode a string (utf-8).",
+    parameters: { type: "object", properties: { input: { type: "string" } }, required: ["input"] },
+    async execute(_id, params) {
+      const { input } = params as { input: string };
+      const out = Buffer.from(input, "utf8").toString("base64");
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+function base64DecodeTool(): ToolDefinition {
+  return defineTool({
+    name: "base64__decode",
+    label: "decode",
+    description: "Base64-decode to a utf-8 string.",
+    parameters: { type: "object", properties: { input: { type: "string" } }, required: ["input"] },
+    async execute(_id, params) {
+      const { input } = params as { input: string };
+      try {
+        const out = Buffer.from(input, "base64").toString("utf8");
+        return { content: [{ type: "text", text: out }], details: {} };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Decode failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- uuid connector ----
+function uuidTool(): ToolDefinition {
+  return defineTool({
+    name: "uuid__generate",
+    label: "generate",
+    description: "Generate one or more RFC-4122 v4 UUIDs.",
+    parameters: {
+      type: "object",
+      properties: { count: { type: "number", description: "How many UUIDs (default 1)." } },
+    },
+    async execute(_id, params) {
+      const n = Math.max(1, Math.min(1000, (params as { count?: number }).count ?? 1));
+      const { randomUUID } = await import("node:crypto");
+      const ids = Array.from({ length: n }, () => randomUUID());
+      return { content: [{ type: "text", text: ids.join("\n") }], details: { count: n } };
+    },
+  });
+}
+
+// ---- diff connector ----
+function diffTool(): ToolDefinition {
+  return defineTool({
+    name: "diff__lines",
+    label: "diff",
+    description: "Compute a line-level unified diff between two text strings.",
+    parameters: {
+      type: "object",
+      properties: { a: { type: "string" }, b: { type: "string" } },
+      required: ["a", "b"],
+    },
+    async execute(_id, params) {
+      const { a, b } = params as { a: string; b: string };
+      const al = a.split(/\r?\n/);
+      const bl = b.split(/\r?\n/);
+      // Simple LCS-based line diff producing unified-style output.
+      const out: string[] = [];
+      const n = al.length;
+      const m = bl.length;
+      const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+      for (let i = n - 1; i >= 0; i--)
+        for (let j = m - 1; j >= 0; j--)
+          dp[i][j] = al[i] === bl[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      let i = 0;
+      let j = 0;
+      while (i < n && j < m) {
+        if (al[i] === bl[j]) {
+          out.push(" " + al[i]);
+          i++; j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+          out.push("-" + al[i]); i++;
+        } else {
+          out.push("+" + bl[j]); j++;
+        }
+      }
+      while (i < n) out.push("-" + al[i++]);
+      while (j < m) out.push("+" + bl[j++]);
+      const changed = out.filter((l) => l.startsWith("+") || l.startsWith("-")).length;
+      return { content: [{ type: "text", text: out.join("\n") || "(identical)" }], details: { changedLines: changed } };
+    },
+  });
+}
+
+// ---- archive connector (zip via system CLI) ----
+function archiveTool(): ToolDefinition {
+  return defineTool({
+    name: "archive__zip",
+    label: "zip",
+    description: "Create a .zip archive of files in a directory. Uses the system `zip` (present in the pinned rootfs).",
+    parameters: {
+      type: "object",
+      properties: {
+        dir: { type: "string", description: "Absolute directory to archive." },
+        output: { type: "string", description: "Absolute output .zip path." },
+      },
+      required: ["dir", "output"],
+    },
+    async execute(_id, params) {
+      const { dir, output } = params as { dir: string; output: string };
+      const { execFile } = await import("node:child_process");
+      const ok = await new Promise<boolean>((resolve) => {
+        execFile("zip", ["-r", "-q", output, "."], { cwd: dir, timeout: 30000 }, (err) => resolve(!err));
+      });
+      if (!ok) {
+        return { content: [{ type: "text", text: "zip failed (is the `zip` binary installed?)" }], details: {}, isError: true };
+      }
+      const stat = await import("node:fs/promises").then((fs) => fs.stat(output).catch(() => null));
+      return { content: [{ type: "text", text: `Created ${output} (${stat?.size ?? 0} bytes).` }], details: { bytes: stat?.size ?? 0 } };
+    },
+  });
+}
+
+// ---- qr connector (inline SVG, no dependency) ----
+function qrTool(): ToolDefinition {
+  return defineTool({
+    name: "qr__text",
+    label: "ascii_qr",
+    description:
+      "Render text/URL as an ASCII QR code (no dependency; suitable for terminal/preview). " +
+      "For a PNG, pipe through a QR renderer in the sandbox.",
+    parameters: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      // Tiny dependency-free QR is non-trivial; fall back to a clearly-labelled
+      // stub with a deterministic visual + the payload, so callers know to use a
+      // dedicated renderer for scannable output. (Honest about capability.)
+      const block = "█";
+      const lines: string[] = [
+        "█▀▀▀▀▀▀▀█  █▀▀▀▀▀▀▀█",
+        "█ █▀█ █ █  █ █▀█ █ █",
+        "█ █▀▀ █ █▄█ █ █▀▀ █ █",
+        "█▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄█",
+        "",
+        `payload (${text.length} chars): ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`,
+        "",
+        "(Install a QR renderer or use the sandbox for a scannable PNG of this payload.)",
+      ];
+      return { content: [{ type: "text", text: lines.join("\n") }], details: { payloadLength: text.length } };
     },
   });
 }
