@@ -626,7 +626,91 @@ class McpConnectorManager {
         tools: [textCaseTool()],
       });
     }
+    if (!this.connectors.has("histogram")) {
+      this.connectors.set("histogram", {
+        config: { id: "histogram", name: "Histogram (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [histogramTool()],
+      });
+    }
+    if (!this.connectors.has("percentile")) {
+      this.connectors.set("percentile", {
+        config: { id: "percentile", name: "Percentile (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [percentileTool()],
+      });
+    }
+    if (!this.connectors.has("correlate")) {
+      this.connectors.set("correlate", {
+        config: { id: "correlate", name: "Correlation (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [correlationTool()],
+      });
+    }
+    if (!this.connectors.has("freqtable")) {
+      this.connectors.set("freqtable", {
+        config: { id: "freqtable", name: "Frequency table (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [freqTableTool()],
+      });
+    }
+    if (!this.connectors.has("sortlines")) {
+      this.connectors.set("sortlines", {
+        config: { id: "sortlines", name: "Sort lines (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [sortLinesTool()],
+      });
+    }
+    if (!this.connectors.has("dedupe")) {
+      this.connectors.set("dedupe", {
+        config: { id: "dedupe", name: "Dedupe (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [dedupeTool()],
+      });
+    }
+    if (!this.connectors.has("reverse")) {
+      this.connectors.set("reverse", {
+        config: { id: "reverse", name: "Reverse text (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [reverseTool()],
+      });
+    }
+    if (!this.connectors.has("chunk")) {
+      this.connectors.set("chunk", {
+        config: { id: "chunk", name: "Chunk (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [chunkTool()],
+      });
+    }
+    if (!this.connectors.has("truncate")) {
+      this.connectors.set("truncate", {
+        config: { id: "truncate", name: "Truncate (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [truncateTool()],
+      });
+    }
+    if (!this.connectors.has("linecount")) {
+      this.connectors.set("linecount", {
+        config: { id: "linecount", name: "Line count (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [lineCountTool()],
+      });
+    }
+    if (!this.connectors.has("charfreq")) {
+      this.connectors.set("charfreq", {
+        config: { id: "charfreq", name: "Char frequency (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [charFreqTool()],
+      });
+    }
+    if (!this.connectors.has("strdist")) {
+      this.connectors.set("strdist", {
+        config: { id: "strdist", name: "String distance (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [stringDistTool()],
+      });
 
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -2748,6 +2832,214 @@ function textCaseTool(): ToolDefinition {
         case "kebab": out = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); break;
       }
       return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- histogram connector ----
+function histogramTool(): ToolDefinition {
+  return defineTool({
+    name: "histogram__build",
+    label: "build",
+    description: "Build a histogram from a list of numbers with given bin count.",
+    parameters: { type: "object", properties: { numbers: { type: "array", items: { type: "number" } }, bins: { type: "number" } }, required: ["numbers"] },
+    async execute(_id, params) {
+      const nums = (params as { numbers: number[] }).numbers ?? [];
+      const binCount = (params as { bins?: number }).bins ?? 10;
+      if (!nums.length) return { content: [{ type: "text", text: "No data." }], details: {}, isError: true };
+      const min = Math.min(...nums), max = Math.max(...nums);
+      const width = (max - min) / binCount || 1;
+      const counts = new Array(binCount).fill(0);
+      for (const n of nums) { const b = Math.min(binCount - 1, Math.floor((n - min) / width)); counts[b]++; }
+      const bars = counts.map((c, i) => `[${(min + i * width).toFixed(1)}–${(min + (i + 1) * width).toFixed(1)}): ${"█".repeat(c)} ${c}`).join("\n");
+      return { content: [{ type: "text", text: bars }], details: { bins: counts } };
+    },
+  });
+}
+
+// ---- percentile connector ----
+function percentileTool(): ToolDefinition {
+  return defineTool({
+    name: "percentile__compute",
+    label: "compute",
+    description: "Compute the Nth percentile of a list of numbers.",
+    parameters: { type: "object", properties: { numbers: { type: "array", items: { type: "number" } }, p: { type: "number" } }, required: ["numbers", "p"] },
+    async execute(_id, params) {
+      const nums = [...((params as { numbers: number[] }).numbers ?? [])].sort((a, b) => a - b);
+      const p = (params as { p: number }).p;
+      if (!nums.length || p < 0 || p > 100) return { content: [{ type: "text", text: "Need numbers and p in [0,100]." }], details: {}, isError: true };
+      const idx = (p / 100) * (nums.length - 1);
+      const lo = Math.floor(idx), hi = Math.ceil(idx);
+      const val = lo === hi ? nums[lo] : nums[lo] + (nums[hi] - nums[lo]) * (idx - lo);
+      return { content: [{ type: "text", text: `p${p} = ${val}` }], details: { percentile: p, value: val } };
+    },
+  });
+}
+
+// ---- correlation connector ----
+function correlationTool(): ToolDefinition {
+  return defineTool({
+    name: "correlate__pearson",
+    label: "pearson",
+    description: "Compute Pearson correlation coefficient between two equal-length arrays.",
+    parameters: { type: "object", properties: { x: { type: "array", items: { type: "number" } }, y: { type: "array", items: { type: "number" } } }, required: ["x", "y"] },
+    async execute(_id, params) {
+      const x = (params as any).x ?? [], y = (params as any).y ?? [];
+      if (x.length !== y.length || !x.length) return { content: [{ type: "text", text: "Need equal-length arrays." }], details: {}, isError: true };
+      const n = x.length;
+      const sx = x.reduce((a: number, b: number) => a + b, 0), sy = y.reduce((a: number, b: number) => a + b, 0);
+      const sxy = x.reduce((s: number, xi: number, i: number) => s + xi * y[i], 0);
+      const sx2 = x.reduce((s: number, xi: number) => s + xi * xi, 0), sy2 = y.reduce((s: number, yi: number) => s + yi * yi, 0);
+      const r = (n * sxy - sx * sy) / Math.sqrt((n * sx2 - sx * sx) * (n * sy2 - sy * sy));
+      return { content: [{ type: "text", text: `Pearson r = ${r.toFixed(4)}` }], details: { r } };
+    },
+  });
+}
+
+// ---- frequency-table connector ----
+function freqTableTool(): ToolDefinition {
+  return defineTool({
+    name: "freqtable__build",
+    label: "build",
+    description: "Build a frequency table from a list of categorical values.",
+    parameters: { type: "object", properties: { values: { type: "array" } }, required: ["values"] },
+    async execute(_id, params) {
+      const vals = (params as any).values ?? [];
+      const freq: Record<string, number> = {};
+      for (const v of vals) freq[String(v)] = (freq[String(v)] ?? 0) + 1;
+      const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+      return { content: [{ type: "text", text: sorted.map(([k, c]) => `${k}: ${c}`).join("\n") }], details: { unique: sorted.length } };
+    },
+  });
+}
+
+// ---- sort-lines connector ----
+function sortLinesTool(): ToolDefinition {
+  return defineTool({
+    name: "sortlines__sort",
+    label: "sort",
+    description: "Sort lines of text alphabetically (or reverse).",
+    parameters: { type: "object", properties: { text: { type: "string" }, reverse: { type: "boolean" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text, reverse } = params as { text: string; reverse?: boolean };
+      const lines = text.split(/\r?\n/).sort();
+      if (reverse) lines.reverse();
+      return { content: [{ type: "text", text: lines.join("\n") }], details: { count: lines.length } };
+    },
+  });
+}
+
+// ---- dedupe connector ----
+function dedupeTool(): ToolDefinition {
+  return defineTool({
+    name: "dedupe__lines",
+    label: "dedupe",
+    description: "Remove duplicate lines, preserving first-occurrence order.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const seen = new Set<string>();
+      const out = text.split(/\r?\n/).filter((l) => { if (seen.has(l)) return false; seen.add(l); return true; });
+      return { content: [{ type: "text", text: out.join("\n") }], details: { unique: out.length } };
+    },
+  });
+}
+
+// ---- reverse connector ----
+function reverseTool(): ToolDefinition {
+  return defineTool({
+    name: "reverse__text",
+    label: "reverse",
+    description: "Reverse text: by character or by word.",
+    parameters: { type: "object", properties: { text: { type: "string" }, by: { type: "string", enum: ["char", "word"] } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text, by } = params as { text: string; by?: string };
+      const out = by === "word" ? text.split(/\s+/).reverse().join(" ") : text.split("").reverse().join("");
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- chunk connector ----
+function chunkTool(): ToolDefinition {
+  return defineTool({
+    name: "chunk__split",
+    label: "split",
+    description: "Split a list into chunks of size N.",
+    parameters: { type: "object", properties: { items: { type: "array" }, size: { type: "number" } }, required: ["items", "size"] },
+    async execute(_id, params) {
+      const items = (params as any).items ?? [];
+      const size = Math.max(1, (params as any).size ?? 2);
+      const chunks: any[][] = [];
+      for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+      return { content: [{ type: "text", text: JSON.stringify(chunks, null, 2) }], details: { chunks: chunks.length } };
+    },
+  });
+}
+
+// ---- truncate connector ----
+function truncateTool(): ToolDefinition {
+  return defineTool({
+    name: "truncate__text",
+    label: "truncate",
+    description: "Truncate text to N chars with an ellipsis.",
+    parameters: { type: "object", properties: { text: { type: "string" }, maxChars: { type: "number" } }, required: ["text", "maxChars"] },
+    async execute(_id, params) {
+      const { text, maxChars } = params as { text: string; maxChars: number };
+      const out = text.length > maxChars ? text.slice(0, maxChars) + "…" : text;
+      return { content: [{ type: "text", text: out }], details: { original: text.length, truncated: out.length } };
+    },
+  });
+}
+
+// ---- line-count connector ----
+function lineCountTool(): ToolDefinition {
+  return defineTool({
+    name: "linecount__count",
+    label: "count",
+    description: "Count lines in text (blank + non-blank separately).",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const lines = text.split(/\r?\n/);
+      const blank = lines.filter((l) => !l.trim()).length;
+      return { content: [{ type: "text", text: `${lines.length} lines (${blank} blank, ${lines.length - blank} non-blank)` }], details: { total: lines.length, blank, nonBlank: lines.length - blank } };
+    },
+  });
+}
+
+// ---- char-frequency connector ----
+function charFreqTool(): ToolDefinition {
+  return defineTool({
+    name: "charfreq__count",
+    label: "count",
+    description: "Count character frequency in text (top N).",
+    parameters: { type: "object", properties: { text: { type: "string" }, topN: { type: "number" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text, topN } = params as { text: string; topN?: number };
+      const freq: Record<string, number> = {};
+      for (const c of text) freq[c] = (freq[c] ?? 0) + 1;
+      const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, topN ?? 20);
+      return { content: [{ type: "text", text: sorted.map(([c, n]) => `'${c}': ${n}`).join("\n") }], details: { unique: Object.keys(freq).length } };
+    },
+  });
+}
+
+// ---- string-distance connector (Levenshtein) ----
+function stringDistTool(): ToolDefinition {
+  return defineTool({
+    name: "strdist__levenshtein",
+    label: "levenshtein",
+    description: "Compute the Levenshtein edit distance between two strings.",
+    parameters: { type: "object", properties: { a: { type: "string" }, b: { type: "string" } }, required: ["a", "b"] },
+    async execute(_id, params) {
+      const { a, b } = params as { a: string; b: string };
+      const m = a.length, n = b.length;
+      const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      return { content: [{ type: "text", text: `Levenshtein("${a}","${b}") = ${dp[m][n]}` }], details: { distance: dp[m][n] } };
     },
   });
 }

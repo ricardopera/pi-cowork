@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase", "histogram", "percentile", "correlate", "freqtable", "sortlines", "dedupe", "reverse", "chunk", "truncate", "linecount", "charfreq", "strdist",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 77 connector tools across 62 connectors", async () => {
+  it("seedDefaults exposes 89 connector tools across 74 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert", "histogram__build", "percentile__compute", "correlate__pearson", "freqtable__build", "sortlines__sort", "dedupe__lines", "reverse__text", "chunk__split", "truncate__text", "linecount__count", "charfreq__count", "strdist__levenshtein",
       ]),
     );
-    expect(names.length).toBe(77);
+    expect(names.length).toBe(89);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(77);
+    expect(mgr.getToolNames().length).toBe(89);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -625,4 +625,33 @@ describe("bundled default connectors", () => {
     const en = await t.execute("tc1", { text: "the quick brown fox is running" }, undefined, undefined, {} as any);
     expect((en.content[0] as any).text).toContain("English");
   });
+
+  it("sortlines__sort sorts alphabetically", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "sortlines__sort")!;
+    const res = await t.execute("tc1", { text: "banana\napple\ncherry" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("apple\nbanana\ncherry");
+  });
+
+  it("dedupe__lines removes duplicates", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "dedupe__lines")!;
+    const res = await t.execute("tc1", { text: "a\nb\na\nc\nb" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toBe("a\nb\nc");
+  });
+
+  it("strdist__levenshtein computes edit distance", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "strdist__levenshtein")!;
+    const res = await t.execute("tc1", { a: "kitten", b: "sitting" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("3");
+  });
+
+  it("percentile__compute returns the p-th value", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "percentile__compute")!;
+    const res = await t.execute("tc1", { numbers: [1, 2, 3, 4, 5], p: 50 }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("3");
+  });
+
 });
