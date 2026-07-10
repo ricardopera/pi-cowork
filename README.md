@@ -27,12 +27,12 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 - **Sandboxed execution layer** (bubblewrap): bash commands run inside a per-session `bwrap` container — read-only host toolchain (/usr, /bin, /lib), private tmpfs `/tmp`, the workspace bind-mounted as the only writable path, user/PID/IPC namespaces unshared (`--unshare-all`), optional network egress. Falls back to plain exec when bwrap is absent. Mirrors Cowork's sandboxed-VM model.
 - **Cowork-style safety guardrails** enforced via a `tool_call` hook: a **prohibited-action list** (banking/ID data, system-file/permission mods, trades, destructive commands, secret exfiltration — always blocked) and an **explicit-permission list** (downloads, purchases, OAuth, publishing, sending messages, mass-deletes — surfaced as Approve/Deny cards the user must confirm); prompt errors surfaced to the client
 
-**72 agent tools** (registered per session):
+**64 agent tools** (registered per session):
 - *Workflow:* `ask_question` (clarifying cards, pauses agent), `todo_write` (task-list widget)
 - *Documents:* `create_docx` / `create_xlsx` / `create_pptx` / `create_pdf` / `create_file` + `present_files` (downloadable deliverables)
 - *Memory:* `memory_write` / `memory_read` / `memory_search` (persistent, typed: user/feedback/project/reference)
 - *Browser control (19):* navigate, click, type, scrape, screenshot, close, tabs (list/new/switch/close), JS execution, form-fill, wait-for-selector, network inspection, console capture, request interception/blocking, cookie management, PDF export, geolocation override (Playwright)
-- *Computer-use (21):* screenshot, mouse move/click/drag, scroll + scroll-direction, type, key + key-combo chords, modifier+click, clipboard read/write, wait, multi-region capture, window list/focus, OCR text extraction, color pick, file open, system notification, display-resolution query (nut-js)
+- - *Computer-use (27):* screenshot, mouse move/click/drag/multi-click, scroll + scroll-direction, type, key + key-combo + key-hold, modifier+click, clipboard read/write, wait, multi-region capture, window list/focus/arrange, OCR, color pick, file open, notification, display-resolution query, mouse-position, active-window-title, screenshot-diff (nut-js)
 - *Artifacts:* `create_artifact` (live HTML in sandboxed iframe)
 - *Sub-agents:* `dispatch_subagents` (runs independent tasks concurrently in separate in-memory sessions)
 - *MCP connectors:* connected MCP-server tools auto-register (dynamic)

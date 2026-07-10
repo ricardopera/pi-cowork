@@ -45,14 +45,35 @@ describe("computer-use tools", () => {
     );
   });
 
-  it("creates 21 tools with metadata", () => {
+  it("creates 27 tools with metadata", () => {
     const t = tools();
-    expect(t.length).toBe(21);
+    expect(t.length).toBe(27);
     for (const tool of t) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();
       expect(typeof tool.execute).toBe("function");
     }
+  });
+
+  it("multi_click requires x, y, count", () => {
+    const schema = byName(tools(), "computer_multi_click").parameters as any;
+    expect(schema.required).toEqual(["x", "y", "count"]);
+  });
+
+  it("key_hold requires key + action", () => {
+    const schema = byName(tools(), "computer_key_hold").parameters as any;
+    expect(schema.required).toEqual(["key", "action"]);
+    expect(schema.properties.action.enum).toEqual(["down", "up"]);
+  });
+
+  it("window_arrange requires index + position + size", () => {
+    const schema = byName(tools(), "computer_window_arrange").parameters as any;
+    expect(schema.required).toEqual(["index", "x", "y", "width", "height"]);
+  });
+
+  it("mouse_position and active_window take no required params", () => {
+    expect((byName(tools(), "computer_mouse_position").parameters as any).required ?? []).toEqual([]);
+    expect((byName(tools(), "computer_active_window").parameters as any).required ?? []).toEqual([]);
   });
 
   it("scroll_direction requires a direction", () => {

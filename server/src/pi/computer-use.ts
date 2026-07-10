@@ -708,7 +708,174 @@ export function createComputerUseTools(deps: ComputerUseDeps): ToolDefinition[] 
     },
   });
 
-  return [screenshot, mouseMove, click, drag, scroll, scrollBy, type, key, keyCombo, modifierClick, clipboardRead, clipboardWrite, waitFor, captureRegions, windowList, windowFocus, ocr, colorPick, fileOpen, notify, displayInfo];
+  // ---- multi-click (double / triple) ----
+  const multiClick = defineTool({
+    name: "computer_multi_click",
+    label: "Multi-click",
+    description:
+      "Click N times at a position (double-click=2, triple-click=3). Useful for " +
+      "word/paragraph selection or opening files.",
+    parameters: {
+      type: "object",
+      properties: {
+        x: { type: "number" },
+        y: { type: "number" },
+        count: { type: "number", description: "Number of clicks (2=double, 3=triple)." },
+      },
+      required: ["x", "y", "count"],
+    },
+    async execute(_id, params) {
+      const { x, y, count } = params as { x: number; y: number; count: number };
+      const nut = await getNut();
+      await nut.mouse.setPosition(new nut.Point(x, y));
+      for (let i = 0; i < Math.max(1, Math.min(5, count)); i++) {
+        await nut.mouse.leftClick();
+      }
+      return { content: [{ type: "text", text: `Clicked ${count}x at (${x}, ${y}).` }], details: { x, y, count } };
+    },
+  });
+
+  // ---- mouse position query ----
+  const mousePosition = defineTool({
+    name: "computer_mouse_position",
+    label: "Get mouse position",
+    description: "Return the current (x, y) position of the mouse cursor.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const nut = await getNut();
+      const pos = await nut.mouse.getPosition();
+      return { content: [{ type: "text", text: `Mouse at (${pos.x}, ${pos.y}).` }], details: { x: pos.x, y: pos.y } };
+    },
+  });
+
+  // ---- key hold/release (for selection-drag, shortcuts) ----
+  const keyHold = defineTool({
+    name: "computer_key_hold",
+    label: "Hold/release a key",
+    description:
+      "Press and hold (action='down') or release (action='up') a key. Use for " +
+      "shift-drag selection or holding a modifier across multiple actions.",
+    parameters: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key name, e.g. 'shift', 'control'." },
+        action: { type: "string", enum: ["down", "up"] },
+      },
+      required: ["key", "action"],
+    },
+    async execute(_id, params) {
+      const { key: k, action } = params as { key: string; action: "down" | "up" };
+      const nut = await getNut();
+      const mapped = mapKey(k);
+      if (action === "down") await nut.keyboard.pressKey(mapped);
+      else await nut.keyboard.releaseKey(mapped);
+      return { content: [{ type: "text", text: `${action === "down" ? "Held" : "Released"} ${k}.` }], details: { key: k, action } };
+    },
+  });
+
+  // ---- window move / resize ----
+  const windowArrange = defineTool({
+    name: "computer_window_arrange",
+    label: "Move/resize a window",
+    description:
+      "Move and/or resize a window by index (from computer_window_list). Provide x,y " +
+      "(top-left) and width,height in pixels.",
+    parameters: {
+      type: "object",
+      properties: {
+        index: { type: "number", description: "Window index from computer_window_list." },
+        x: { type: "number" },
+        y: { type: "number" },
+        width: { type: "number" },
+        height: { type: "number" },
+      },
+      required: ["index", "x", "y", "width", "height"],
+    },
+    async execute(_id, params) {
+      const { index, x, y, width, height } = params as any;
+      const nut = await getNut();
+      const wins = await nut.getWindows();
+      const target = wins[index];
+      if (!target) return { content: [{ type: "text", text: `No window at index ${index}.` }], details: {}, isError: true };
+      try {
+        const Region = nut.Region;
+        await target.move(new Region(x, y, width, height));
+        return { content: [{ type: "text", text: `Moved window ${index} to (${x},${y}) ${width}x${height}.` }], details: { index } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Window arrange failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+
+  // ---- active window title ----
+  const activeWindow = defineTool({
+    name: "computer_active_window",
+    label: "Get active window title",
+    description: "Return the title of the currently-focused window.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const nut = await getNut();
+      try {
+        const w = await nut.getActiveWindow();
+        const title = await w.title().catch(() => "(unknown)");
+        return { content: [{ type: "text", text: `Active window: "${title}".` }], details: { title } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+
+  // ---- screenshot diff (compare two captures) ----
+  const screenshotDiff = defineTool({
+    name: "computer_screenshot_diff",
+    label: "Compare two screenshots",
+    description:
+      "Capture two screenshots a moment apart (or before/after an action) and report " +
+      "the fraction of pixels that changed. Useful to confirm a UI reacted to an input.",
+    parameters: {
+      type: "object",
+      properties: {
+        betweenMs: { type: "number", description: "Delay between the two captures (default 500ms)." },
+      },
+    },
+    async execute(_id, params) {
+      const { betweenMs } = params as { betweenMs?: number };
+      const nut = await getNut();
+      const outDir = path.join(deps.cwd, "outputs");
+      await fs.mkdir(outDir, { recursive: true });
+      const a = await nut.screen.capture();
+      await new Promise((r) => setTimeout(r, betweenMs ?? 500));
+      const b = await nut.screen.capture();
+      const p1 = path.join(outDir, `diff-a-${Date.now()}.png`);
+      const p2 = path.join(outDir, `diff-b-${Date.now()}.png`);
+      await a.toFile(p1);
+      await b.toFile(p2);
+      // Cheap pixel-diff via image dimensions + per-pixel RGB distance using nut's Image.
+      // nut-js images expose .toRGB(); fall back to a size-equality heuristic if absent.
+      let changedFraction = 0;
+      try {
+        const rgbA = await a.toRGB();
+        const rgbB = await b.toRGB();
+        const len = Math.min(rgbA.length, rgbB.length);
+        let diffs = 0;
+        for (let i = 0; i < len; i++) if (Math.abs(rgbA[i] - rgbB[i]) > 16) diffs++;
+        changedFraction = len ? diffs / len : 0;
+      } catch {
+        changedFraction = -1; // signal "unable to compare"
+      }
+      const files: PresentedFile[] = [
+        { name: path.basename(p1), path: path.relative(deps.cwd, p1), format: "other", sizeBytes: (await fs.stat(p1)).size },
+        { name: path.basename(p2), path: path.relative(deps.cwd, p2), format: "other", sizeBytes: (await fs.stat(p2)).size },
+      ];
+      deps.emitFiles(files);
+      return {
+        content: [{ type: "text", text: changedFraction < 0 ? "(comparison unavailable)" : `${(changedFraction * 100).toFixed(1)}% of pixels changed.` }],
+        details: { changedFraction },
+      };
+    },
+  });
+
+  return [screenshot, mouseMove, click, drag, scroll, scrollBy, type, key, keyCombo, modifierClick, clipboardRead, clipboardWrite, waitFor, captureRegions, windowList, windowFocus, ocr, colorPick, fileOpen, notify, displayInfo, multiClick, mousePosition, keyHold, windowArrange, activeWindow, screenshotDiff];
 }
 
 export const COMPUTER_USE_TOOL_NAMES = [
@@ -733,5 +900,11 @@ export const COMPUTER_USE_TOOL_NAMES = [
   "computer_open_file",
   "computer_notify",
   "computer_display_info",
+  "computer_multi_click",
+  "computer_mouse_position",
+  "computer_key_hold",
+  "computer_window_arrange",
+  "computer_active_window",
+  "computer_screenshot_diff",
 ];
 
