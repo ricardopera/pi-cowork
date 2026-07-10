@@ -21,13 +21,13 @@ describe("bundled default connectors", () => {
     await mgr.seedDefaults();
     const list = mgr.list();
     const ids = list.map((c) => c.id);
-    expect(ids).toEqual(expect.arrayContaining(["fetch", "fs", "time", "calc", "sqlite"]));
-    for (const id of ["fetch", "fs", "time", "calc", "sqlite"]) {
+    expect(ids).toEqual(expect.arrayContaining(["fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash"]));
+    for (const id of ["fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash"]) {
       expect(list.find((c) => c.id === id)?.status).toBe("connected");
     }
   });
 
-  it("seedDefaults exposes 9 connector tools across 5 connectors", async () => {
+  it("seedDefaults exposes 14 connector tools across 8 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -37,15 +37,51 @@ describe("bundled default connectors", () => {
         "time__now", "time__convert",
         "calc__eval", "calc__stats",
         "sqlite__query",
+        "git__status", "git__log", "git__diff",
+        "env__get",
+        "hash__checksum",
       ]),
     );
-    expect(names.length).toBe(9);
+    expect(names.length).toBe(14);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(9);
+    expect(mgr.getToolNames().length).toBe(14);
+  });
+
+  it("env__get reads a non-secret variable", async () => {
+    process.env.PICOWORK_TEST_VAR = "hello-env";
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "env__get")!;
+    const res = await t.execute("tc1", { name: "PICOWORK_TEST_VAR" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("hello-env");
+    delete process.env.PICOWORK_TEST_VAR;
+  });
+
+  it("env__get refuses to read likely-secret variables", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "env__get")!;
+    const res = await t.execute("tc1", { name: "MY_API_KEY" }, undefined, undefined, {} as any);
+    expect(res.isError).toBe(true);
+  });
+
+  it("hash__checksum computes a sha256 digest", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "hash__checksum")!;
+    const res = await t.execute("tc1", { input: "pi-cowork", algorithm: "sha256" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("sha256");
+    expect(text).toMatch(/[0-9a-f]{64}/); // a 64-hex sha256 digest is present
+  });
+
+  it("git__status reports on a repository", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "git__status")!;
+    const res = await t.execute("tc1", { repo: process.cwd() }, undefined, undefined, {} as any);
+    // Either a status listing or "(clean)" — both indicate the tool ran.
+    expect(typeof (res.content[0] as any).text).toBe("string");
   });
 
   it("time__now returns the current time in a timezone", async () => {

@@ -227,6 +227,27 @@ class McpConnectorManager {
         tools: [sqliteQueryTool()],
       });
     }
+    if (!this.connectors.has("git")) {
+      this.connectors.set("git", {
+        config: { id: "git", name: "Git (bundled)", transport: "stdio", status: "connected", toolCount: 3 },
+        client: null,
+        tools: [gitStatusTool(), gitLogTool(), gitDiffTool()],
+      });
+    }
+    if (!this.connectors.has("env")) {
+      this.connectors.set("env", {
+        config: { id: "env", name: "Env (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [envGetTool()],
+      });
+    }
+    if (!this.connectors.has("hash")) {
+      this.connectors.set("hash", {
+        config: { id: "hash", name: "Hash (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [hashTool()],
+      });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -532,6 +553,124 @@ function sqliteQueryTool(): ToolDefinition {
       } catch (e: any) {
         return { content: [{ type: "text", text: `Query failed (is sqlite3 installed?): ${e?.message}` }], details: {}, isError: true };
       }
+    },
+  });
+}
+
+// ---- git connector (read-only repo inspection) ----
+async function runGit(repo: string, args: string[]): Promise<{ ok: boolean; text: string }> {
+  const { execFile } = await import("node:child_process");
+  return new Promise((resolve) => {
+    execFile("git", args, { cwd: repo, timeout: 15000 }, (err, stdout, stderr) => {
+      if (err) resolve({ ok: false, text: (stderr || err.message).trim() });
+      else resolve({ ok: true, text: stdout });
+    });
+  });
+}
+
+function gitStatusTool(): ToolDefinition {
+  return defineTool({
+    name: "git__status",
+    label: "status",
+    description: "Show the working-tree status of a git repository (porcelain).",
+    parameters: {
+      type: "object",
+      properties: { repo: { type: "string", description: "Absolute path to the repo." } },
+      required: ["repo"],
+    },
+    async execute(_id, params) {
+      const { repo } = params as { repo: string };
+      const r = await runGit(repo, ["status", "--short", "-b"]);
+      return { content: [{ type: "text", text: r.text || "(clean)" }], details: { ok: r.ok } };
+    },
+  });
+}
+
+function gitLogTool(): ToolDefinition {
+  return defineTool({
+    name: "git__log",
+    label: "log",
+    description: "Show recent commit history (hash, author, subject).",
+    parameters: {
+      type: "object",
+      properties: {
+        repo: { type: "string" },
+        limit: { type: "number", description: "Number of commits (default 20)." },
+      },
+      required: ["repo"],
+    },
+    async execute(_id, params) {
+      const { repo, limit } = params as { repo: string; limit?: number };
+      const n = limit ?? 20;
+      const r = await runGit(repo, ["log", `-${n}`, "--pretty=%h | %an | %s"]);
+      return { content: [{ type: "text", text: r.text || "(no commits)" }], details: { ok: r.ok } };
+    },
+  });
+}
+
+function gitDiffTool(): ToolDefinition {
+  return defineTool({
+    name: "git__diff",
+    label: "diff",
+    description: "Show uncommitted changes (working tree vs HEAD).",
+    parameters: {
+      type: "object",
+      properties: { repo: { type: "string" }, cached: { type: "boolean", description: "Show staged changes." } },
+      required: ["repo"],
+    },
+    async execute(_id, params) {
+      const { repo, cached } = params as { repo: string; cached?: boolean };
+      const r = await runGit(repo, ["diff", ...(cached ? ["--cached"] : [])]);
+      return { content: [{ type: "text", text: r.text || "(no changes)" }], details: { ok: r.ok } };
+    },
+  });
+}
+
+// ---- env connector (read non-secret environment variables) ----
+function envGetTool(): ToolDefinition {
+  return defineTool({
+    name: "env__get",
+    label: "get_env",
+    description:
+      "Read a server environment variable by name. Refuses names that look like secrets " +
+      "(key/token/secret/password) for safety.",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string", description: "Environment variable name." } },
+      required: ["name"],
+    },
+    async execute(_id, params) {
+      const { name } = params as { name: string };
+      if (/key|token|secret|password|credential/i.test(name)) {
+        return { content: [{ type: "text", text: `Refusing to read a likely-secret variable: ${name}` }], details: {}, isError: true };
+      }
+      const val = process.env[name];
+      if (val === undefined) return { content: [{ type: "text", text: `(unset: ${name})` }], details: { set: false } };
+      return { content: [{ type: "text", text: `${name}=${val}` }], details: { set: true } };
+    },
+  });
+}
+
+// ---- hash connector (checksums for integrity checks) ----
+function hashTool(): ToolDefinition {
+  return defineTool({
+    name: "hash__checksum",
+    label: "checksum",
+    description: "Compute a SHA-256 (or md5/sha1) checksum of a string or file.",
+    parameters: {
+      type: "object",
+      properties: {
+        input: { type: "string", description: "The string content to hash." },
+        algorithm: { type: "string", enum: ["sha256", "sha1", "md5"], description: "Default sha256." },
+      },
+      required: ["input"],
+    },
+    async execute(_id, params) {
+      const { input, algorithm } = params as { input: string; algorithm?: string };
+      const algo = (algorithm ?? "sha256") as "sha256" | "sha1" | "md5";
+      const { createHash } = await import("node:crypto");
+      const digest = createHash(algo).update(input).digest("hex");
+      return { content: [{ type: "text", text: `${algo}(${input.slice(0, 40)}${input.length > 40 ? "…" : ""}) = ${digest}` }], details: { algorithm: algo, digest } };
     },
   });
 }

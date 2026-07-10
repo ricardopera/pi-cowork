@@ -27,7 +27,7 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 - **Sandboxed execution layer** (bubblewrap): bash commands run inside a per-session `bwrap` container — read-only host toolchain (/usr, /bin, /lib), private tmpfs `/tmp`, the workspace bind-mounted as the only writable path, user/PID/IPC namespaces unshared (`--unshare-all`), optional network egress. Falls back to plain exec when bwrap is absent. Mirrors Cowork's sandboxed-VM model.
 - **Cowork-style safety guardrails** enforced via a `tool_call` hook: a **prohibited-action list** (banking/ID data, system-file/permission mods, trades, destructive commands, secret exfiltration — always blocked) and an **explicit-permission list** (downloads, purchases, OAuth, publishing, sending messages, mass-deletes — surfaced as Approve/Deny cards the user must confirm); prompt errors surfaced to the client
 
-**67 agent tools** (registered per session):
+**72 agent tools** (registered per session):
 - *Workflow:* `ask_question` (clarifying cards, pauses agent), `todo_write` (task-list widget)
 - *Documents:* `create_docx` / `create_xlsx` / `create_pptx` / `create_pdf` / `create_file` + `present_files` (downloadable deliverables)
 - *Memory:* `memory_write` / `memory_read` / `memory_search` (persistent, typed: user/feedback/project/reference)
@@ -41,7 +41,7 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 **Extensibility & automation**
 - **MCP connectors** — connect to any MCP server (stdio / HTTP / SSE); its tools become agent tools. Managed via REST.
 - **Slash commands** — `/help`, `/todo`, `/doc`, `/research`, `/memory`, `/clear`, `/stop` (extensible registry)
-- **Skills** — markdown skill files (with frontmatter), managed via REST, loaded by Pi Agent from `.agents/skills/`. 42 starter skills seeded.
+- **Skills** — markdown skill files (with frontmatter), managed via REST, loaded by Pi Agent from `.agents/skills/`. 67 starter skills seeded.
 - **Scheduled tasks** — cron expressions or one-shot `fireAt`; run autonomously on a tick
 - **Projects** — named, persistent workspaces (outputs / memory / skills / custom instructions scoped per project)
 
