@@ -556,6 +556,77 @@ class McpConnectorManager {
         tools: [haikuTool()],
       });
     }
+    if (!this.connectors.has("country")) {
+      this.connectors.set("country", {
+        config: { id: "country", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [countryInfoTool()],
+      });
+    }
+    if (!this.connectors.has("langdetect")) {
+      this.connectors.set("langdetect", {
+        config: { id: "langdetect", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [langDetectTool()],
+      });
+    }
+    if (!this.connectors.has("textstats")) {
+      this.connectors.set("textstats", {
+        config: { id: "textstats", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [textStatsTool()],
+      });
+    }
+    if (!this.connectors.has("wordfreq")) {
+      this.connectors.set("wordfreq", {
+        config: { id: "wordfreq", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [wordFreqTool()],
+      });
+    }
+    if (!this.connectors.has("palindrome")) {
+      this.connectors.set("palindrome", {
+        config: { id: "palindrome", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [palindromeTool()],
+      });
+    }
+    if (!this.connectors.has("anagram")) {
+      this.connectors.set("anagram", {
+        config: { id: "anagram", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [anagramTool()],
+      });
+    }
+    if (!this.connectors.has("caesar")) {
+      this.connectors.set("caesar", {
+        config: { id: "caesar", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [caesarTool()],
+      });
+    }
+    if (!this.connectors.has("atbash")) {
+      this.connectors.set("atbash", {
+        config: { id: "atbash", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [atbashTool()],
+      });
+    }
+    if (!this.connectors.has("binconv")) {
+      this.connectors.set("binconv", {
+        config: { id: "binconv", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [binaryConvertTool()],
+      });
+    }
+    if (!this.connectors.has("textcase")) {
+      this.connectors.set("textcase", {
+        config: { id: "textcase", name: "${name}", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [textCaseTool()],
+      });
+    }
+
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -2457,6 +2528,226 @@ function haikuTool(): ToolDefinition {
       const line2 = `${r(seven1)} ${r(seven2)}`;
       const line3 = `${r(five1)} ${r(five2)}`;
       return { content: [{ type: "text", text: `${line1}\n${line2}\n${line3}` }], details: {} };
+    },
+  });
+}
+
+// ---- country-info connector (via restcountries.com) ----
+function countryInfoTool(): ToolDefinition {
+  return defineTool({
+    name: "country__info",
+    label: "info",
+    description: "Look up country info (capital, population, currencies, languages, flag) by name or ISO code. Live via restcountries.com.",
+    parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    async execute(_id, params) {
+      const { query } = params as { query: string };
+      try {
+        const res = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(query)}?fields=name,capital,population,currencies,languages,flag`, { signal: AbortSignal.timeout(10000) as any });
+        const data = await res.json();
+        const c = Array.isArray(data) ? data[0] : data;
+        if (!c) return { content: [{ type: "text", text: `No country found for ${query}` }], details: {}, isError: true };
+        return {
+          content: [{ type: "text", text: `${c.name?.common}: capital=${c.capital?.[0] ?? "?"}, pop=${c.population}, currencies=${Object.keys(c.currencies ?? {}).join(",")}, languages=${Object.values(c.languages ?? {}).join(",")} ${c.flag ?? ""}` }],
+          details: { name: c.name?.common, capital: c.capital?.[0], population: c.population },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Country lookup failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- language-detect connector (script-based heuristic) ----
+function langDetectTool(): ToolDefinition {
+  return defineTool({
+    name: "langdetect__detect",
+    label: "detect",
+    description: "Heuristic language detection by Unicode script + common stopwords. Returns detected script and likely language.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const scripts: [RegExp, string][] = [
+        [/[\u4e00-\u9fff]/, "Chinese (CJK)"],
+        [/[\u3040-\u30ff]/, "Japanese (kana)"],
+        [/[\uac00-\ud7af]/, "Korean (Hangul)"],
+        [/[\u0400-\u04ff]/, "Cyrillic (Russian/Bulgarian/etc.)"],
+        [/[\u0600-\u06ff]/, "Arabic"],
+        [/[\u0900-\u097f]/, "Devanagari (Hindi/etc.)"],
+        [/[\u0590-\u05ff]/, "Hebrew"],
+        [/[\u4e00-\u9fff]/, "Thai"],
+      ];
+      for (const [re, label] of scripts) { if (re.test(text)) return { content: [{ type: "text", text: label }], details: { language: label } }; }
+      // Latin: use stopwords
+      const lower = text.toLowerCase();
+      const en = /\b(the|and|is|of|to|in|that|it|for)\b/.test(lower);
+      const es = /\b(el|la|de|que|en|los|se|las|por)\b/.test(lower);
+      const fr = /\b(le|les|de|et|des|que|dans|un|une)\b/.test(lower);
+      const de = /\b(der|die|das|und|ist|nicht|ein|den|von)\b/.test(lower);
+      const lang = en ? "English" : es ? "Spanish" : fr ? "French" : de ? "German" : "Latin script (unknown)";
+      return { content: [{ type: "text", text: lang }], details: { language: lang } };
+    },
+  });
+}
+
+// ---- text-stats connector (detailed stats beyond grammar__count) ----
+function textStatsTool(): ToolDefinition {
+  return defineTool({
+    name: "textstats__analyze",
+    label: "analyze",
+    description: "Compute detailed text stats: avg word length, longest word, reading time, unique words.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const words = text.split(/\s+/).filter(Boolean);
+      const wc = words.length || 1;
+      const avgLen = words.reduce((s, w) => s + w.length, 0) / wc;
+      const longest = words.reduce((a, b) => b.length > a.length ? b : a, "");
+      const unique = new Set(words.map((w) => w.toLowerCase())).size;
+      const readingTimeMin = Math.ceil(wc / 200);
+      return {
+        content: [{ type: "text", text: `${wc} words, avg length ${avgLen.toFixed(1)}, longest="${longest}", ${unique} unique, ~${readingTimeMin} min read` }],
+        details: { words: wc, avgLength: avgLen, longest, unique, readingTimeMin },
+      };
+    },
+  });
+}
+
+// ---- word-frequency connector ----
+function wordFreqTool(): ToolDefinition {
+  return defineTool({
+    name: "wordfreq__count",
+    label: "count",
+    description: "Count word frequency in text. Returns the top N words by count.",
+    parameters: {
+      type: "object",
+      properties: { text: { type: "string" }, topN: { type: "number", description: "Default 10." } },
+      required: ["text"],
+    },
+    async execute(_id, params) {
+      const { text, topN } = params as { text: string; topN?: number };
+      const n = topN ?? 10;
+      const freq: Record<string, number> = {};
+      for (const w of text.toLowerCase().split(/\W+/).filter(Boolean)) freq[w] = (freq[w] ?? 0) + 1;
+      const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, n);
+      return { content: [{ type: "text", text: top.map(([w, c]) => `${w}: ${c}`).join("\n") }], details: { unique: Object.keys(freq).length } };
+    },
+  });
+}
+
+// ---- palindrome check connector ----
+function palindromeTool(): ToolDefinition {
+  return defineTool({
+    name: "palindrome__check",
+    label: "check",
+    description: "Check if text is a palindrome (ignoring case, spaces, and punctuation).",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const clean = text.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const isPal = clean === clean.split("").reverse().join("");
+      return { content: [{ type: "text", text: isPal ? `"${text}" IS a palindrome.` : `"${text}" is NOT a palindrome.` }], details: { isPalindrome: isPal } };
+    },
+  });
+}
+
+// ---- anagram check connector ----
+function anagramTool(): ToolDefinition {
+  return defineTool({
+    name: "anagram__check",
+    label: "check",
+    description: "Check if two words/phrases are anagrams (same letters rearranged).",
+    parameters: { type: "object", properties: { a: { type: "string" }, b: { type: "string" } }, required: ["a", "b"] },
+    async execute(_id, params) {
+      const { a, b } = params as { a: string; b: string };
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").split("").sort().join("");
+      const isAna = norm(a) === norm(b);
+      return { content: [{ type: "text", text: isAna ? `"${a}" and "${b}" ARE anagrams.` : `"${a}" and "${b}" are NOT anagrams.` }], details: { isAnagram: isAna } };
+    },
+  });
+}
+
+// ---- caesar cipher connector ----
+function caesarTool(): ToolDefinition {
+  return defineTool({
+    name: "caesar__shift",
+    label: "shift",
+    description: "Apply a Caesar cipher shift to text. shift: integer (positive = right, negative = left).",
+    parameters: { type: "object", properties: { text: { type: "string" }, shift: { type: "number" } }, required: ["text", "shift"] },
+    async execute(_id, params) {
+      const { text, shift } = params as { text: string; shift: number };
+      const out = text.replace(/[a-zA-Z]/g, (c) => {
+        const base = c <= "Z" ? 65 : 97;
+        return String.fromCharCode(((c.charCodeAt(0) - base + shift + 26 * 100) % 26) + base);
+      });
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- atbash cipher connector ----
+function atbashTool(): ToolDefinition {
+  return defineTool({
+    name: "atbash__apply",
+    label: "apply",
+    description: "Apply the Atbash cipher (A<->Z, B<->Y, ...). Self-inverse.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const out = text.replace(/[a-zA-Z]/g, (c) => {
+        const base = c <= "Z" ? 65 : 97;
+        return String.fromCharCode(base + 25 - (c.charCodeAt(0) - base));
+      });
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- binary convert connector ----
+function binaryConvertTool(): ToolDefinition {
+  return defineTool({
+    name: "binconv__convert",
+    label: "convert",
+    description: "Convert text to binary (8-bit per char) or binary back to text (auto-detect direction).",
+    parameters: { type: "object", properties: { input: { type: "string" } }, required: ["input"] },
+    async execute(_id, params) {
+      const { input } = params as { input: string };
+      if (/^[01\s]+$/.test(input)) {
+        const text = input.trim().split(/\s+/).map((b) => String.fromCharCode(parseInt(b, 2))).join("");
+        return { content: [{ type: "text", text }], details: { direction: "binary->text" } };
+      }
+      const binary = input.split("").map((c) => c.charCodeAt(0).toString(2).padStart(8, "0")).join(" ");
+      return { content: [{ type: "text", text: binary }], details: { direction: "text->binary" } };
+    },
+  });
+}
+
+// ---- text-case connector ----
+function textCaseTool(): ToolDefinition {
+  return defineTool({
+    name: "textcase__convert",
+    label: "convert",
+    description: "Convert text case: upper, lower, title, sentence, camelCase, snake_case, kebab-case.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+        to: { type: "string", enum: ["upper", "lower", "title", "sentence", "camel", "snake", "kebab"] },
+      },
+      required: ["text", "to"],
+    },
+    async execute(_id, params) {
+      const { text, to } = params as { text: string; to: string };
+      let out = text;
+      switch (to) {
+        case "upper": out = text.toUpperCase(); break;
+        case "lower": out = text.toLowerCase(); break;
+        case "title": out = text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()); break;
+        case "sentence": out = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(); break;
+        case "camel": out = text.toLowerCase().replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase()); break;
+        case "snake": out = text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""); break;
+        case "kebab": out = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); break;
+      }
+      return { content: [{ type: "text", text: out }], details: {} };
     },
   });
 }

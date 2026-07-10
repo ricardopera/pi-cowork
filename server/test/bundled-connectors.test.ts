@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 67 connector tools across 52 connectors", async () => {
+  it("seedDefaults exposes 77 connector tools across 62 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert",
       ]),
     );
-    expect(names.length).toBe(67);
+    expect(names.length).toBe(77);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(67);
+    expect(mgr.getToolNames().length).toBe(77);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -554,4 +554,75 @@ describe("bundled default connectors", () => {
     if (!res.isError) expect(text).toMatch(/"[^"]+"/); // title in quotes
     else expect(text).toMatch(/No book found|lookup failed/i);
   }, 20000);
+
+  it("palindrome__check detects palindromes", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "palindrome__check")!;
+    const yes = await t.execute("tc1", { text: "A man a plan a canal Panama" }, undefined, undefined, {} as any);
+    expect((yes.content[0] as any).text).toContain("IS a palindrome");
+    const no = await t.execute("tc2", { text: "hello world" }, undefined, undefined, {} as any);
+    expect((no.content[0] as any).text).toContain("NOT");
+  });
+
+  it("anagram__check compares words", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "anagram__check")!;
+    const yes = await t.execute("tc1", { a: "listen", b: "silent" }, undefined, undefined, {} as any);
+    expect((yes.content[0] as any).text).toContain("ARE anagrams");
+    const no = await t.execute("tc2", { a: "hello", b: "world" }, undefined, undefined, {} as any);
+    expect((no.content[0] as any).text).toContain("NOT");
+  });
+
+  it("caesar__shift shifts by N", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "caesar__shift")!;
+    const res = await t.execute("tc1", { text: "abc", shift: 3 }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toBe("def");
+  });
+
+  it("atbash__apply is self-inverse", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "atbash__apply")!;
+    const e = await t.execute("tc1", { text: "Hello" }, undefined, undefined, {} as any);
+    const d = await t.execute("tc2", { text: (e.content[0] as any).text }, undefined, undefined, {} as any);
+    expect((d.content[0] as any).text).toBe("Hello");
+  });
+
+  it("binconv__convert round-trips text->binary->text", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "binconv__convert")!;
+    const enc = await t.execute("tc1", { input: "Hi" }, undefined, undefined, {} as any);
+    expect((enc.content[0] as any).text).toMatch(/^01001/);
+    const dec = await t.execute("tc2", { input: (enc.content[0] as any).text }, undefined, undefined, {} as any);
+    expect((dec.content[0] as any).text).toBe("Hi");
+  });
+
+  it("textcase__convert converts to snake_case", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "textcase__convert")!;
+    const res = await t.execute("tc1", { text: "Hello World Foo", to: "snake" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toBe("hello_world_foo");
+  });
+
+  it("wordfreq__count returns top words", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "wordfreq__count")!;
+    const res = await t.execute("tc1", { text: "the the the cat cat dog", topN: 3 }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text.split("\n")[0]).toContain("the: 3");
+  });
+
+  it("textstats__analyze returns detailed stats", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "textstats__analyze")!;
+    const res = await t.execute("tc1", { text: "hello world foo" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("3 words");
+  });
+
+  it("langdetect__detect identifies Latin script languages", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "langdetect__detect")!;
+    const en = await t.execute("tc1", { text: "the quick brown fox is running" }, undefined, undefined, {} as any);
+    expect((en.content[0] as any).text).toContain("English");
+  });
 });
