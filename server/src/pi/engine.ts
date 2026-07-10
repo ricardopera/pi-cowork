@@ -15,6 +15,8 @@ import { createArtifactTools, ARTIFACT_TOOL_NAMES } from "./artifacts.js";
 import { getMcpManager } from "./mcp-connectors.js";
 import { createSubagentTool, SUBAGENT_TOOL_NAMES } from "./subagent-tool.js";
 import { createComputerUseTools, COMPUTER_USE_TOOL_NAMES } from "./computer-use.js";
+import { createBashTool } from "@earendil-works/pi-coding-agent";
+import { sandboxBashOperations, isBwrapAvailable } from "./sandbox.js";
 import { classifyToolCall } from "../safety.js";
 import type { WireEvent } from "../event-schema.js";
 
@@ -220,6 +222,13 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
     emitFiles: (files) => emitWire({ type: "present_files", sessionId, files }),
   });
 
+  // Sandboxed bash tool: runs every command inside a per-session bubblewrap
+  // container (mirrors Cowork's VM model). Falls back to plain exec if bwrap
+  // is absent. Overrides the built-in "bash" tool by name.
+  const sandboxedBash = createBashTool(cwd, {
+    operations: sandboxBashOperations(cwd, true),
+  });
+
   const { session } = await createAgentSession({
     cwd,
     model,
@@ -237,6 +246,7 @@ export async function createPiSession(opts: CreatePiSessionOptions): Promise<PiS
       ...COMPUTER_USE_TOOL_NAMES,
     ],
     customTools: [
+      sandboxedBash as any,
       ...coworkTools,
       ...docTools,
       ...memoryTools,
