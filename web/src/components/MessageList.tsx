@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Turn } from "./types";
 import { ToolCard } from "./ToolCard";
+import { Markdown } from "./Markdown";
 
 export function MessageList({ turns }: { turns: Turn[] }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -12,21 +13,40 @@ export function MessageList({ turns }: { turns: Turn[] }) {
     <div className="messages">
       {turns.length === 0 && (
         <div className="empty">
-          <h2>Pi-Cowork</h2>
-          <p>
-            Ask me to do something — research a topic, write a document, analyze data, or
-            automate a task. Powered by Pi Agent with your choice of provider.
-          </p>
+          <div className="empty-icon">✦</div>
+          <h2>How can I help?</h2>
+          <div className="examples">
+            <button className="example" onClick={() => {}}>
+              📄 Write a one-page report on renewable energy trends
+            </button>
+            <button className="example" onClick={() => {}}>
+              📊 Create a spreadsheet comparing three project management tools
+            </button>
+            <button className="example" onClick={() => {}}>
+              🔍 Research the latest developments in quantum computing
+            </button>
+            <button className="example" onClick={() => {}}>
+              📑 Draft meeting notes from this transcript
+            </button>
+          </div>
         </div>
       )}
       {turns.map((t) => (
         <div key={t.id} className="turn">
+          <div className="msg-role user-role">You</div>
           <div className="bubble user">{t.userText}</div>
           {t.thinking && <div className="thinking">{t.thinking}</div>}
           {t.tools.map((tr) => (
             <ToolCard key={tr.toolCallId} tool={tr} />
           ))}
-          {t.assistantText && <div className="bubble assistant">{t.assistantText}</div>}
+          {t.assistantText && (
+            <>
+              <div className="msg-role assistant-role">Pi-Cowork</div>
+              <div className="bubble assistant">
+                <Markdown content={t.assistantText} />
+              </div>
+            </>
+          )}
           {t.error && <div className="error">⚠ {t.error}</div>}
         </div>
       ))}
