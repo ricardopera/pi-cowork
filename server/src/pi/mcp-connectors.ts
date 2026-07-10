@@ -841,6 +841,66 @@ class McpConnectorManager {
     if (!this.connectors.has("fact")) {
       this.connectors.set("fact", { config: { id: "fact", name: "Factorial (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [factorialTool()] });
     }
+    if (!this.connectors.has("fib")) {
+      this.connectors.set("fib", { config: { id: "fib", name: "Fibonacci (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [fibonacciTool()] });
+    }
+    if (!this.connectors.has("collatz")) {
+      this.connectors.set("collatz", { config: { id: "collatz", name: "Collatz (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [collatzTool()] });
+    }
+    if (!this.connectors.has("ismult")) {
+      this.connectors.set("ismult", { config: { id: "ismult", name: "Is multiple (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [isMultipleTool()] });
+    }
+    if (!this.connectors.has("divmod")) {
+      this.connectors.set("divmod", { config: { id: "divmod", name: "Div mod (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [divModTool()] });
+    }
+    if (!this.connectors.has("meanmed")) {
+      this.connectors.set("meanmed", { config: { id: "meanmed", name: "Mean median mode (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [meanMedianModeTool()] });
+    }
+    if (!this.connectors.has("range")) {
+      this.connectors.set("range", { config: { id: "range", name: "Range (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [rangeTool()] });
+    }
+    if (!this.connectors.has("variance")) {
+      this.connectors.set("variance", { config: { id: "variance", name: "Variance (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [varianceTool()] });
+    }
+    if (!this.connectors.has("zip")) {
+      this.connectors.set("zip", { config: { id: "zip", name: "Zip arrays (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [zipTool()] });
+    }
+    if (!this.connectors.has("flatten")) {
+      this.connectors.set("flatten", { config: { id: "flatten", name: "Flatten (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [flattenTool()] });
+    }
+    if (!this.connectors.has("uniq")) {
+      this.connectors.set("uniq", { config: { id: "uniq", name: "Unique (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [uniqueTool()] });
+    }
+    if (!this.connectors.has("intersect")) {
+      this.connectors.set("intersect", { config: { id: "intersect", name: "Intersect (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [intersectTool()] });
+    }
+    if (!this.connectors.has("setdiff")) {
+      this.connectors.set("setdiff", { config: { id: "setdiff", name: "Set difference (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [setDiffTool()] });
+    }
+    if (!this.connectors.has("groupcount")) {
+      this.connectors.set("groupcount", { config: { id: "groupcount", name: "Group count (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [groupCountTool()] });
+    }
+    if (!this.connectors.has("dotprod")) {
+      this.connectors.set("dotprod", { config: { id: "dotprod", name: "Dot product (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [dotProductTool()] });
+    }
+    if (!this.connectors.has("vadd")) {
+      this.connectors.set("vadd", { config: { id: "vadd", name: "Vector add (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [vectorAddTool()] });
+    }
+    if (!this.connectors.has("transpose")) {
+      this.connectors.set("transpose", { config: { id: "transpose", name: "Transpose (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [transposeTool()] });
+    }
+    if (!this.connectors.has("isop")) {
+      this.connectors.set("isop", { config: { id: "isop", name: "Is odd/even (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [isOddEvenTool()] });
+    }
+    if (!this.connectors.has("digits")) {
+      this.connectors.set("digits", { config: { id: "digits", name: "Digits (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [digitsTool()] });
+    }
+    if (!this.connectors.has("textfind")) {
+      this.connectors.set("textfind", { config: { id: "textfind", name: "Text find (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [textFindTool()] });
+    }
+    if (!this.connectors.has("textreplace")) {
+      this.connectors.set("textreplace", { config: { id: "textreplace", name: "Text replace (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [textReplaceTool()] });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -3652,4 +3712,85 @@ function factorialTool(): ToolDefinition {
       return { content: [{ type: "text", text: `${n}! = ${r}` }], details: { result: r } };
     },
   });
+}
+
+function fibonacciTool(): ToolDefinition {
+  return defineTool({ name: "fib__sequence", label: "sequence", description: "Generate the first N Fibonacci numbers.", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+    async execute(_id, params) { const n = Math.min(100, (params as any).n); const seq = [0,1]; for(let i=2;i<n;i++) seq.push(seq[i-1]+seq[i-2]); return { content: [{ type: "text", text: seq.slice(0,n).join(", ") }], details: {} }; } });
+}
+function collatzTool(): ToolDefinition {
+  return defineTool({ name: "collatz__sequence", label: "sequence", description: "Generate the Collatz sequence starting from N.", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+    async execute(_id, params) { let n = (params as any).n; const seq=[n]; while(n>1){n=n%2===0?n/2:3*n+1;seq.push(n);} return { content: [{ type: "text", text: seq.join(" -> ") }], details: { steps: seq.length } }; } });
+}
+function isMultipleTool(): ToolDefinition {
+  return defineTool({ name: "ismult__check", label: "check", description: "Check if A is a multiple of B.", parameters: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } }, required: ["a", "b"] },
+    async execute(_id, params) { const {a,b}=params as any; const is=b!==0&&a%b===0; return { content: [{ type: "text", text: `${a} ${is?"IS":"is NOT"} a multiple of ${b}` }], details: { isMultiple: is } }; } });
+}
+function divModTool(): ToolDefinition {
+  return defineTool({ name: "divmod__compute", label: "compute", description: "Compute quotient and remainder of A / B.", parameters: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } }, required: ["a", "b"] },
+    async execute(_id, params) { const {a,b}=params as any; if(b===0) return { content:[{type:"text",text:"Cannot divide by zero."}],details:{},isError:true }; return { content: [{ type: "text", text: `${a} / ${b} = ${Math.floor(a/b)} remainder ${a%b}` }], details: { quotient: Math.floor(a/b), remainder: a%b } }; } });
+}
+function meanMedianModeTool(): ToolDefinition {
+  return defineTool({ name: "meanmed__compute", label: "compute", description: "Compute mean, median, and mode of a list.", parameters: { type: "object", properties: { numbers: { type: "array", items: { type: "number" } } }, required: ["numbers"] },
+    async execute(_id, params) { const arr=[...((params as any).numbers??[])].sort((a,b)=>a-b); if(!arr.length) return {content:[{type:"text",text:"No data."}],details:{},isError:true}; const mean=arr.reduce((a,b)=>a+b,0)/arr.length; const med=arr.length%2?arr[(arr.length-1)/2]:(arr[arr.length/2-1]+arr[arr.length/2])/2; const freq:Record<string,number>={}; arr.forEach(n=>freq[n]=(freq[n]??0)+1); const maxFreq=Math.max(...Object.values(freq)); const modes=Object.entries(freq).filter(([,f])=>f===maxFreq).map(([k])=>Number(k)); return { content: [{ type: "text", text: `mean=${mean.toFixed(2)} median=${med} mode=${modes.join(",")} (${maxFreq}x)` }], details: { mean, median: med, modes } }; } });
+}
+function rangeTool(): ToolDefinition {
+  return defineTool({ name: "range__compute", label: "compute", description: "Compute the range (max-min) of a list of numbers.", parameters: { type: "object", properties: { numbers: { type: "array", items: { type: "number" } } }, required: ["numbers"] },
+    async execute(_id, params) { const arr=(params as any).numbers??[]; if(!arr.length) return {content:[{type:"text",text:"No data."}],details:{},isError:true}; const min=Math.min(...arr),max=Math.max(...arr); return { content: [{ type: "text", text: `range = ${max} - ${min} = ${max-min}` }], details: { min, max, range: max-min } }; } });
+}
+function varianceTool(): ToolDefinition {
+  return defineTool({ name: "variance__compute", label: "compute", description: "Compute variance and standard deviation (population).", parameters: { type: "object", properties: { numbers: { type: "array", items: { type: "number" } } }, required: ["numbers"] },
+    async execute(_id, params) { const arr=(params as any).numbers??[]; if(!arr.length) return {content:[{type:"text",text:"No data."}],details:{},isError:true}; const mean=arr.reduce((a,b)=>a+b,0)/arr.length; const variance=arr.reduce((s,n)=>s+(n-mean)**2,0)/arr.length; return { content: [{ type: "text", text: `variance=${variance.toFixed(4)} stddev=${Math.sqrt(variance).toFixed(4)}` }], details: { variance, stddev: Math.sqrt(variance) } }; } });
+}
+function zipTool(): ToolDefinition {
+  return defineTool({ name: "zip__arrays", label: "zip", description: "Zip two arrays into pairs.", parameters: { type: "object", properties: { a: { type: "array" }, b: { type: "array" } }, required: ["a", "b"] },
+    async execute(_id, params) { const {a,b}=params as any; const len=Math.min(a?.length??0,b?.length??0); const pairs=Array.from({length:len},(_,i)=>[a[i],b[i]]); return { content: [{ type: "text", text: JSON.stringify(pairs) }], details: { pairs: len } }; } });
+}
+function flattenTool(): ToolDefinition {
+  return defineTool({ name: "flatten__nested", label: "flatten", description: "Flatten a nested array (one level deep).", parameters: { type: "object", properties: { array: { type: "array" } }, required: ["array"] },
+    async execute(_id, params) { const arr=(params as any).array??[]; const flat=arr.flat(); return { content: [{ type: "text", text: JSON.stringify(flat) }], details: { count: flat.length } }; } });
+}
+function uniqueTool(): ToolDefinition {
+  return defineTool({ name: "uniq__dedupe", label: "dedupe", description: "Return unique values from an array (preserving order).", parameters: { type: "object", properties: { items: { type: "array" } }, required: ["items"] },
+    async execute(_id, params) { const items=(params as any).items??[]; const seen=new Set(); const uniq=items.filter((x:any)=>{const k=JSON.stringify(x);if(seen.has(k))return false;seen.add(k);return true;}); return { content: [{ type: "text", text: JSON.stringify(uniq) }], details: { unique: uniq.length } }; } });
+}
+function intersectTool(): ToolDefinition {
+  return defineTool({ name: "intersect__arrays", label: "intersect", description: "Find the intersection of two arrays.", parameters: { type: "object", properties: { a: { type: "array" }, b: { type: "array" } }, required: ["a", "b"] },
+    async execute(_id, params) { const setB=new Set((params as any).b?.map((x:any)=>JSON.stringify(x))??[]); const inter=((params as any).a??[]).filter((x:any)=>setB.has(JSON.stringify(x))); return { content: [{ type: "text", text: JSON.stringify([...new Set(inter)]) }], details: { count: new Set(inter.map((x:any)=>JSON.stringify(x))).size } }; } });
+}
+function setDiffTool(): ToolDefinition {
+  return defineTool({ name: "setdiff__arrays", label: "difference", description: "Find items in A that are NOT in B (set difference).", parameters: { type: "object", properties: { a: { type: "array" }, b: { type: "array" } }, required: ["a", "b"] },
+    async execute(_id, params) { const setB=new Set((params as any).b?.map((x:any)=>JSON.stringify(x))??[]); const diff=((params as any).a??[]).filter((x:any)=>!setB.has(JSON.stringify(x))); return { content: [{ type: "text", text: JSON.stringify(diff) }], details: { count: diff.length } }; } });
+}
+function groupCountTool(): ToolDefinition {
+  return defineTool({ name: "groupcount__count", label: "count", description: "Group items by a key function and count per group.", parameters: { type: "object", properties: { items: { type: "array" }, key: { type: "string", description: "Property name to group by (for objects) or 'self' for primitives." } }, required: ["items", "key"] },
+    async execute(_id, params) { const items=(params as any).items??[]; const key=(params as any).key; const freq:Record<string,number>={}; for(const item of items){const k=key==="self"?String(item):String(item?.[key]??"?");freq[k]=(freq[k]??0)+1;} const sorted=Object.entries(freq).sort((a,b)=>b[1]-a[1]); return { content: [{ type: "text", text: sorted.map(([k,c])=>`${k}: ${c}`).join("\n") }], details: { groups: sorted.length } }; } });
+}
+function dotProductTool(): ToolDefinition {
+  return defineTool({ name: "dotprod__compute", label: "compute", description: "Compute the dot product of two equal-length number arrays.", parameters: { type: "object", properties: { a: { type: "array", items: { type: "number" } }, b: { type: "array", items: { type: "number" } } }, required: ["a", "b"] },
+    async execute(_id, params) { const {a,b}=params as any; if(a?.length!==b?.length||!a?.length) return {content:[{type:"text",text:"Need equal-length arrays."}],details:{},isError:true}; const dp=a.reduce((s:number,x:number,i:number)=>s+x*b[i],0); return { content: [{ type: "text", text: `dot product = ${dp}` }], details: { dotProduct: dp } }; } });
+}
+function vectorAddTool(): ToolDefinition {
+  return defineTool({ name: "vadd__compute", label: "compute", description: "Add two equal-length number vectors element-wise.", parameters: { type: "object", properties: { a: { type: "array", items: { type: "number" } }, b: { type: "array", items: { type: "number" } } }, required: ["a", "b"] },
+    async execute(_id, params) { const {a,b}=params as any; if(a?.length!==b?.length||!a?.length) return {content:[{type:"text",text:"Need equal-length arrays."}],details:{},isError:true}; const sum=a.map((x:number,i:number)=>x+b[i]); return { content: [{ type: "text", text: JSON.stringify(sum) }], details: {} }; } });
+}
+function transposeTool(): ToolDefinition {
+  return defineTool({ name: "transpose__matrix", label: "transpose", description: "Transpose a 2D array (matrix).", parameters: { type: "object", properties: { matrix: { type: "array" } }, required: ["matrix"] },
+    async execute(_id, params) { const m=(params as any).matrix??[]; if(!m.length||!Array.isArray(m[0])) return {content:[{type:"text",text:"Need a 2D array."}],details:{},isError:true}; const t=m[0].map((_:any,c:number)=>m.map((row:any[])=>row[c])); return { content: [{ type: "text", text: JSON.stringify(t) }], details: { rows: t.length, cols: t[0]?.length??0 } }; } });
+}
+function isOddEvenTool(): ToolDefinition {
+  return defineTool({ name: "isop__check", label: "check", description: "Check if a number is odd or even.", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+    async execute(_id, params) { const n=(params as any).n; const isEven=n%2===0; return { content: [{ type: "text", text: `${n} is ${isEven?"even":"odd"}` }], details: { isEven } }; } });
+}
+function digitsTool(): ToolDefinition {
+  return defineTool({ name: "digits__split", label: "split", description: "Split a number into its individual digits.", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+    async execute(_id, params) { const n=Math.abs((params as any).n); const digits=String(n).split("").map(Number); return { content: [{ type: "text", text: `[${digits.join(", ")}]` }], details: { digits, count: digits.length } }; } });
+}
+function textFindTool(): ToolDefinition {
+  return defineTool({ name: "textfind__search", label: "search", description: "Find all line numbers containing a substring.", parameters: { type: "object", properties: { text: { type: "string" }, pattern: { type: "string" } }, required: ["text", "pattern"] },
+    async execute(_id, params) { const {text,pattern}=params as any; const lines=text.split(/\r?\n/); const matches=lines.map((l,i)=>l.includes(pattern)?i+1:null).filter(Boolean); return { content: [{ type: "text", text: matches.length?`Lines: ${matches.join(", ")}`:"(not found)" }], details: { lines: matches } }; } });
+}
+function textReplaceTool(): ToolDefinition {
+  return defineTool({ name: "textreplace__replace", label: "replace", description: "Replace all occurrences of a pattern in text.", parameters: { type: "object", properties: { text: { type: "string" }, from: { type: "string" }, to: { type: "string" } }, required: ["text", "from", "to"] },
+    async execute(_id, params) { const {text,from,to}=params as any; const out=text.split(from).join(to); return { content: [{ type: "text", text: out }], details: { replacements: text.split(from).length-1 } }; } });
 }

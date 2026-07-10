@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase", "histogram", "percentile", "correlate", "freqtable", "sortlines", "dedupe", "reverse", "chunk", "truncate", "linecount", "charfreq", "strdist", "mdlinks", "diffsum", "numwords", "ordinal", "prime", "mathops", "pct", "ratio", "stemmer", "ngram", "wrap", "colalign", "zodiac", "dice", "coinflip", "pick", "shuffle", "tabulate", "outline", "tocgen", "textpad", "stripansi", "countinst", "joinlines", "asciiart", "typetest", "fact",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase", "histogram", "percentile", "correlate", "freqtable", "sortlines", "dedupe", "reverse", "chunk", "truncate", "linecount", "charfreq", "strdist", "mdlinks", "diffsum", "numwords", "ordinal", "prime", "mathops", "pct", "ratio", "stemmer", "ngram", "wrap", "colalign", "zodiac", "dice", "coinflip", "pick", "shuffle", "tabulate", "outline", "tocgen", "textpad", "stripansi", "countinst", "joinlines", "asciiart", "typetest", "fact", "fib", "collatz", "ismult", "divmod", "meanmed", "range", "variance", "zip", "flatten", "uniq", "intersect", "setdiff", "groupcount", "dotprod", "vadd", "transpose", "isop", "digits", "textfind", "textreplace",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 116 connector tools across 101 connectors", async () => {
+  it("seedDefaults exposes 136 connector tools across 121 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert", "histogram__build", "percentile__compute", "correlate__pearson", "freqtable__build", "sortlines__sort", "dedupe__lines", "reverse__text", "chunk__split", "truncate__text", "linecount__count", "charfreq__count", "strdist__levenshtein", "mdlinks__extract", "diffsum__summarize", "numwords__convert", "ordinal__convert", "prime__check", "mathops__gcd_lcm", "pct__compute", "ratio__simplify", "stemmer__porter", "ngram__extract", "wrap__text", "colalign__align", "zodiac__sign", "dice__roll", "coinflip__flip", "pick__random", "shuffle__items", "tabulate__format", "outline__extract", "tocgen__generate", "textpad__pad", "stripansi__clean", "countinst__count", "joinlines__join", "asciiart__banner", "typetest__detect", "fact__compute",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert", "histogram__build", "percentile__compute", "correlate__pearson", "freqtable__build", "sortlines__sort", "dedupe__lines", "reverse__text", "chunk__split", "truncate__text", "linecount__count", "charfreq__count", "strdist__levenshtein", "mdlinks__extract", "diffsum__summarize", "numwords__convert", "ordinal__convert", "prime__check", "mathops__gcd_lcm", "pct__compute", "ratio__simplify", "stemmer__porter", "ngram__extract", "wrap__text", "colalign__align", "zodiac__sign", "dice__roll", "coinflip__flip", "pick__random", "shuffle__items", "tabulate__format", "outline__extract", "tocgen__generate", "textpad__pad", "stripansi__clean", "countinst__count", "joinlines__join", "asciiart__banner", "typetest__detect", "fact__compute", "fib__sequence", "collatz__sequence", "ismult__check", "divmod__compute", "meanmed__compute", "range__compute", "variance__compute", "zip__arrays", "flatten__nested", "uniq__dedupe", "intersect__arrays", "setdiff__arrays", "groupcount__count", "dotprod__compute", "vadd__compute", "transpose__matrix", "isop__check", "digits__split", "textfind__search", "textreplace__replace",
       ]),
     );
-    expect(names.length).toBe(116);
+    expect(names.length).toBe(136);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(116);
+    expect(mgr.getToolNames().length).toBe(136);
   });
 
   it("env__get reads a non-secret variable", async () => {
