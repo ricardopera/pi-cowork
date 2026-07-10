@@ -796,6 +796,51 @@ class McpConnectorManager {
       });
     }
 
+    if (!this.connectors.has("zodiac")) {
+      this.connectors.set("zodiac", { config: { id: "zodiac", name: "Zodiac sign (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [zodiacTool()] });
+    }
+    if (!this.connectors.has("dice")) {
+      this.connectors.set("dice", { config: { id: "dice", name: "Dice roll (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [diceTool()] });
+    }
+    if (!this.connectors.has("coinflip")) {
+      this.connectors.set("coinflip", { config: { id: "coinflip", name: "Coin flip (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [coinFlipTool()] });
+    }
+    if (!this.connectors.has("pick")) {
+      this.connectors.set("pick", { config: { id: "pick", name: "Random pick (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [randomPickTool()] });
+    }
+    if (!this.connectors.has("shuffle")) {
+      this.connectors.set("shuffle", { config: { id: "shuffle", name: "Shuffle (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [shuffleTool()] });
+    }
+    if (!this.connectors.has("tabulate")) {
+      this.connectors.set("tabulate", { config: { id: "tabulate", name: "Tabulate (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [tabulateTool()] });
+    }
+    if (!this.connectors.has("outline")) {
+      this.connectors.set("outline", { config: { id: "outline", name: "Outline (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [outlineTool()] });
+    }
+    if (!this.connectors.has("tocgen")) {
+      this.connectors.set("tocgen", { config: { id: "tocgen", name: "TOC generator (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [tocGenTool()] });
+    }
+    if (!this.connectors.has("textpad")) {
+      this.connectors.set("textpad", { config: { id: "textpad", name: "Text pad (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [textPadTool()] });
+    }
+    if (!this.connectors.has("stripansi")) {
+      this.connectors.set("stripansi", { config: { id: "stripansi", name: "Strip ANSI (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [stripAnsiTool()] });
+    }
+    if (!this.connectors.has("countinst")) {
+      this.connectors.set("countinst", { config: { id: "countinst", name: "Count instances (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [countInstancesTool()] });
+    }
+    if (!this.connectors.has("joinlines")) {
+      this.connectors.set("joinlines", { config: { id: "joinlines", name: "Join lines (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [joinLinesTool()] });
+    }
+    if (!this.connectors.has("asciiart")) {
+      this.connectors.set("asciiart", { config: { id: "asciiart", name: "ASCII art (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [asciiArtTool()] });
+    }
+    if (!this.connectors.has("typetest")) {
+      this.connectors.set("typetest", { config: { id: "typetest", name: "Type test (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [typeTestTool()] });
+    }
+    if (!this.connectors.has("fact")) {
+      this.connectors.set("fact", { config: { id: "fact", name: "Factorial (bundled)", transport: "stdio", status: "connected", toolCount: 1 }, client: null, tools: [factorialTool()] });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -3347,6 +3392,264 @@ function columnAlignTool(): ToolDefinition {
       for (let c = 0; c < cols; c++) widths[c] = Math.max(...rows.map((r) => (r[c] ?? "").length));
       const out = rows.map((r) => r.map((cell, c) => (cell ?? "").padEnd(widths[c])).join("  ")).join("\n");
       return { content: [{ type: "text", text: out }], details: { rows: rows.length, cols } };
+    },
+  });
+}
+
+// ---- zodiac connector ----
+function zodiacTool(): ToolDefinition {
+  return defineTool({
+    name: "zodiac__sign",
+    label: "sign",
+    description: "Get the Western zodiac sign for a birth date (month, day).",
+    parameters: { type: "object", properties: { month: { type: "number" }, day: { type: "number" } }, required: ["month", "day"] },
+    async execute(_id, params) {
+      const { month, day } = params as { month: number; day: number };
+      const signs: [string, number, number][] = [["Capricorn",12,22],["Aquarius",1,20],["Pisces",2,19],["Aries",3,21],["Taurus",4,20],["Gemini",5,21],["Cancer",6,21],["Leo",7,23],["Virgo",8,23],["Libra",9,23],["Scorpio",10,23],["Sagittarius",11,22],["Capricorn",12,22]];
+      let sign = "Capricorn";
+      for (const [name, m, d] of signs) { if (month === m && day >= d) { sign = name; break; } if (month === m && day < d) { const prev = signs[signs.findIndex(([,mm]) => mm === m) - 1]; sign = prev?.[0] ?? "Capricorn"; break; } }
+      if (month < 1 || month > 12 || day < 1 || day > 31) return { content: [{ type: "text", text: "Invalid date." }], details: {}, isError: true };
+      return { content: [{ type: "text", text: `${month}/${day}: ${sign}` }], details: { sign } };
+    },
+  });
+}
+
+// ---- dice-roll connector ----
+function diceTool(): ToolDefinition {
+  return defineTool({
+    name: "dice__roll",
+    label: "roll",
+    description: "Roll N dice with S sides each (default 1d6). Returns individual rolls + sum.",
+    parameters: { type: "object", properties: { count: { type: "number" }, sides: { type: "number" } } },
+    async execute(_id, params) {
+      const count = Math.max(1, Math.min(100, (params as any).count ?? 1));
+      const sides = Math.max(2, Math.min(1000, (params as any).sides ?? 6));
+      const rolls = Array.from({ length: count }, () => 1 + Math.floor(Math.random() * sides));
+      const sum = rolls.reduce((a, b) => a + b, 0);
+      return { content: [{ type: "text", text: `${count}d${sides}: [${rolls.join(", ")}] = ${sum}` }], details: { rolls, sum } };
+    },
+  });
+}
+
+// ---- coin-flip connector ----
+function coinFlipTool(): ToolDefinition {
+  return defineTool({
+    name: "coinflip__flip",
+    label: "flip",
+    description: "Flip a coin N times (default 1). Returns results.",
+    parameters: { type: "object", properties: { count: { type: "number" } } },
+    async execute(_id, params) {
+      const n = Math.max(1, Math.min(10000, (params as any).count ?? 1));
+      const flips = Array.from({ length: n }, () => (Math.random() < 0.5 ? "H" : "T"));
+      return { content: [{ type: "text", text: flips.join(" ") }], details: { heads: flips.filter((f) => f === "H").length, tails: flips.filter((f) => f === "T").length } };
+    },
+  });
+}
+
+// ---- random-pick connector ----
+function randomPickTool(): ToolDefinition {
+  return defineTool({
+    name: "pick__random",
+    label: "random",
+    description: "Pick N random items from a list (without replacement by default).",
+    parameters: { type: "object", properties: { items: { type: "array" }, n: { type: "number" } }, required: ["items"] },
+    async execute(_id, params) {
+      const items = [...((params as any).items ?? [])];
+      const n = Math.min((params as any).n ?? 1, items.length);
+      const picked: any[] = [];
+      for (let i = 0; i < n; i++) picked.push(items.splice(Math.floor(Math.random() * items.length), 1)[0]);
+      return { content: [{ type: "text", text: JSON.stringify(picked) }], details: { picked: n } };
+    },
+  });
+}
+
+// ---- shuffle connector ----
+function shuffleTool(): ToolDefinition {
+  return defineTool({
+    name: "shuffle__items",
+    label: "shuffle",
+    description: "Shuffle a list of items randomly (Fisher-Yates).",
+    parameters: { type: "object", properties: { items: { type: "array" } }, required: ["items"] },
+    async execute(_id, params) {
+      const items = [...((params as any).items ?? [])];
+      for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
+      return { content: [{ type: "text", text: JSON.stringify(items) }], details: {} };
+    },
+  });
+}
+
+// ---- tabulate connector ----
+function tabulateTool(): ToolDefinition {
+  return defineTool({
+    name: "tabulate__format",
+    label: "format",
+    description: "Format an array of objects as a text table with headers.",
+    parameters: { type: "object", properties: { rows: { type: "array" } }, required: ["rows"] },
+    async execute(_id, params) {
+      const rows = (params as any).rows ?? [];
+      if (!rows.length) return { content: [{ type: "text", text: "(empty)" }], details: {} };
+      const headers = Object.keys(rows[0]);
+      const widths = headers.map((h) => Math.max(h.length, ...rows.map((r: any) => String(r[h] ?? "").length)));
+      const fmt = (cells: any[]) => "| " + cells.map((c, i) => String(c ?? "").padEnd(widths[i])).join(" | ") + " |";
+      const sep = "|" + widths.map((w) => "-".repeat(w + 2)).join("|") + "|";
+      return { content: [{ type: "text", text: [fmt(headers), sep, ...rows.map((r: any) => fmt(headers.map((h) => r[h])))].join("\n") }], details: { rows: rows.length } };
+    },
+  });
+}
+
+// ---- outline connector ----
+function outlineTool(): ToolDefinition {
+  return defineTool({
+    name: "outline__extract",
+    label: "extract",
+    description: "Extract a hierarchical outline from Markdown headings.",
+    parameters: { type: "object", properties: { markdown: { type: "string" } }, required: ["markdown"] },
+    async execute(_id, params) {
+      const { markdown } = params as { markdown: string };
+      const lines = markdown.split(/\r?\n/).filter((l) => /^#{1,6}\s/.test(l));
+      const outline = lines.map((l) => { const m = l.match(/^(#{1,6})\s+(.*)/); const lvl = m![1].length; return "  ".repeat(lvl - 1) + "- " + m![2]; }).join("\n");
+      return { content: [{ type: "text", text: outline || "(no headings)" }], details: { count: lines.length } };
+    },
+  });
+}
+
+// ---- toc-generator connector ----
+function tocGenTool(): ToolDefinition {
+  return defineTool({
+    name: "tocgen__generate",
+    label: "generate",
+    description: "Generate a table of contents from Markdown headings with anchor links.",
+    parameters: { type: "object", properties: { markdown: { type: "string" } }, required: ["markdown"] },
+    async execute(_id, params) {
+      const { markdown } = params as { markdown: string };
+      const lines = markdown.split(/\r?\n/).filter((l) => /^#{1,6}\s/.test(l));
+      const toc = lines.map((l) => {
+        const m = l.match(/^(#{1,6})\s+(.*)/); const lvl = m![1].length; const text = m![2];
+        const anchor = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        return "  ".repeat(lvl - 1) + `- [${text}](#${anchor})`;
+      }).join("\n");
+      return { content: [{ type: "text", text: toc || "(no headings)" }], details: { count: lines.length } };
+    },
+  });
+}
+
+// ---- text-pad connector ----
+function textPadTool(): ToolDefinition {
+  return defineTool({
+    name: "textpad__pad",
+    label: "pad",
+    description: "Pad text to a target length (left/right/center) with a given char.",
+    parameters: { type: "object", properties: { text: { type: "string" }, length: { type: "number" }, side: { type: "string", enum: ["left", "right", "center"] }, char: { type: "string" } }, required: ["text", "length"] },
+    async execute(_id, params) {
+      const { text, length, side, char } = params as any;
+      const c = (char ?? " ")[0] ?? " ";
+      const diff = Math.max(0, length - text.length);
+      if (side === "left") return { content: [{ type: "text", text: c.repeat(diff) + text }] };
+      if (side === "center") { const l = Math.floor(diff / 2); return { content: [{ type: "text", text: c.repeat(l) + text + c.repeat(diff - l) }] }; }
+      return { content: [{ type: "text", text: text + c.repeat(diff) }] };
+    },
+  });
+}
+
+// ---- strip-ansi connector ----
+function stripAnsiTool(): ToolDefinition {
+  return defineTool({
+    name: "stripansi__clean",
+    label: "clean",
+    description: "Remove ANSI escape codes from text.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const clean = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+      return { content: [{ type: "text", text: clean }], details: { removed: text.length - clean.length } };
+    },
+  });
+}
+
+// ---- count-instances connector ----
+function countInstancesTool(): ToolDefinition {
+  return defineTool({
+    name: "countinst__count",
+    label: "count",
+    description: "Count non-overlapping occurrences of a substring in text.",
+    parameters: { type: "object", properties: { text: { type: "string" }, pattern: { type: "string" } }, required: ["text", "pattern"] },
+    async execute(_id, params) {
+      const { text, pattern } = params as { text: string; pattern: string };
+      if (!pattern) return { content: [{ type: "text", text: "0" }], details: { count: 0 } };
+      const count = text.split(pattern).length - 1;
+      return { content: [{ type: "text", text: `"${pattern}" appears ${count} time(s).` }], details: { count } };
+    },
+  });
+}
+
+// ---- join-lines connector ----
+function joinLinesTool(): ToolDefinition {
+  return defineTool({
+    name: "joinlines__join",
+    label: "join",
+    description: "Join lines of text with a separator (default ', ').",
+    parameters: { type: "object", properties: { text: { type: "string" }, separator: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text, separator } = params as { text: string; separator?: string };
+      const joined = text.split(/\r?\n/).join(separator ?? ", ");
+      return { content: [{ type: "text", text: joined }], details: {} };
+    },
+  });
+}
+
+// ---- ascii-art connector ----
+function asciiArtTool(): ToolDefinition {
+  return defineTool({
+    name: "asciiart__banner",
+    label: "banner",
+    description: "Render a simple ASCII banner from text (uppercase, block style).",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const fonts: Record<string, string[]> = {
+        A:["  AAA  "," A   A ","AAAAAAA","A     A","A     A"],B:["BBBBBB  ","B     B","BBBBBB ","B     B","BBBBBB  "],C:[" CCCCC ","C     C","C      ","C     C"," CCCCC "],D:["DDDDD  ","D    D","D     D","D    D","DDDDD  "],E:["EEEEEEE","E      ","EEEEE  ","E      ","EEEEEEE"],F:["FFFFFFF","F     ","FFFFF  ","F      ","F      "],G:[" GGGGG ","G     G","G  GGGG","G     G"," GGGG G"],H:["H     H","H     H","HHHHHHH","H     H","H     H"],I:["IIIIIII","   I   ","   I   ","   I   ","IIIIIII"],L:["L      ","L      ","L      ","L      ","LLLLLLL"],N:["N     N","NN    N","N N   N","N  N  N","N     N"],O:[" OOOOO ","O     O","O     O","O     O"," OOOOO "],P:["PPPPPP ","P     P","PPPPPP ","P      ","P      "],R:["RRRRRR ","R     R","RRRRRR ","R    R ","R     R"],S:[" SSSSS","S     "," SSSSS","     S","SSSSS "],T:["TTTTTTT","   T   ","   T   ","   T   ","   T   "],U:["U     U","U     U","U     U","U     U"," UUUUU "],W:["W     W","W     W","W  W  W","W W W W"," W   W "],
+      };
+      const upper = text.toUpperCase().slice(0, 20);
+      const lines = [0,1,2,3,4].map((row) => upper.split("").map((c) => fonts[c]?.[row] ?? "       ").join(" ")).join("\n");
+      return { content: [{ type: "text", text: lines }], details: {} };
+    },
+  });
+}
+
+// ---- type-test connector ----
+function typeTestTool(): ToolDefinition {
+  return defineTool({
+    name: "typetest__detect",
+    label: "detect",
+    description: "Detect the type of a value: string, number, boolean, null, JSON object/array, URL, date.",
+    parameters: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+    async execute(_id, params) {
+      const v = (params as { value: string }).value;
+      let type = "string";
+      if (/^-?\d+$/.test(v)) type = "integer";
+      else if (/^-?\d+\.\d+$/.test(v)) type = "float";
+      else if (v === "true" || v === "false") type = "boolean";
+      else if (v === "null") type = "null";
+      else if (/^https?:\/\//.test(v)) type = "URL";
+      else if (/^\d{4}-\d{2}-\d{2}/.test(v)) type = "date-like";
+      else { try { const p = JSON.parse(v); type = Array.isArray(p) ? "JSON array" : typeof p === "object" && p !== null ? "JSON object" : "string"; } catch {} }
+      return { content: [{ type: "text", text: `"${v.slice(0, 50)}" => ${type}` }], details: { type } };
+    },
+  });
+}
+
+// ---- factorial connector ----
+function factorialTool(): ToolDefinition {
+  return defineTool({
+    name: "fact__compute",
+    label: "compute",
+    description: "Compute the factorial of a non-negative integer (max 170).",
+    parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"] },
+    async execute(_id, params) {
+      const n = (params as { n: number }).n;
+      if (n < 0 || n > 170 || !Number.isInteger(n)) return { content: [{ type: "text", text: "Must be integer 0-170." }], details: {}, isError: true };
+      let r = 1; for (let i = 2; i <= n; i++) r *= i;
+      return { content: [{ type: "text", text: `${n}! = ${r}` }], details: { result: r } };
     },
   });
 }
