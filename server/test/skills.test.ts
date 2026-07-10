@@ -33,11 +33,11 @@ describe("skills manager", () => {
     );
   });
 
-  it("seeds the expanded knowledge-worker skill set (>= 15)", async () => {
+  it("seeds the expanded knowledge-worker skill set (>= 30)", async () => {
     const m = mgr();
     await m.seedBuiltin();
     const names = (await m.list()).map((s) => s.name);
-    expect(names.length).toBeGreaterThanOrEqual(15);
+    expect(names.length).toBeGreaterThanOrEqual(30);
     expect(names).toEqual(
       expect.arrayContaining([
         "Draft an Email",

@@ -186,36 +186,45 @@ class McpConnectorManager {
   }
 
   /**
-   * Register the BUNDLED DEFAULT CONNECTORS — fetch and filesystem — as
-   * always-connected MCP-style connectors with real working tools. These ship
-   * with Pi-Cowork (no external MCP server or key required) so the agent has
-   * usable connector tools out of the box. Idempotent.
+   * Register the BUNDLED DEFAULT CONNECTORS — fetch, filesystem, time, calc,
+   * sqlite — as always-connected MCP-style connectors with real working tools.
+   * These ship with Pi-Cowork (no external MCP server or key required) so the
+   * agent has usable connector tools out of the box. Idempotent.
    */
   async seedDefaults(): Promise<void> {
     if (!this.connectors.has("fetch")) {
       this.connectors.set("fetch", {
-        config: {
-          id: "fetch",
-          name: "Fetch (bundled)",
-          transport: "http",
-          status: "connected",
-          toolCount: 1,
-        },
+        config: { id: "fetch", name: "Fetch (bundled)", transport: "http", status: "connected", toolCount: 1 },
         client: null,
         tools: [fetchTool()],
       });
     }
     if (!this.connectors.has("fs")) {
       this.connectors.set("fs", {
-        config: {
-          id: "fs",
-          name: "Filesystem (bundled)",
-          transport: "stdio",
-          status: "connected",
-          toolCount: 3,
-        },
+        config: { id: "fs", name: "Filesystem (bundled)", transport: "stdio", status: "connected", toolCount: 3 },
         client: null,
         tools: [fsReadTool(), fsWriteTool(), fsListTool()],
+      });
+    }
+    if (!this.connectors.has("time")) {
+      this.connectors.set("time", {
+        config: { id: "time", name: "Time (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [timeNowTool(), timeConvertTool()],
+      });
+    }
+    if (!this.connectors.has("calc")) {
+      this.connectors.set("calc", {
+        config: { id: "calc", name: "Calculator (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [calcEvalTool(), calcStatsTool()],
+      });
+    }
+    if (!this.connectors.has("sqlite")) {
+      this.connectors.set("sqlite", {
+        config: { id: "sqlite", name: "SQLite (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [sqliteQueryTool()],
       });
     }
   }
@@ -380,6 +389,148 @@ function fsListTool(): ToolDefinition {
         return { content: [{ type: "text", text: list.join("\n") || "(empty)" }], details: { count: list.length } };
       } catch (e: any) {
         return { content: [{ type: "text", text: `List failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- time connector ----
+function timeNowTool(): ToolDefinition {
+  return defineTool({
+    name: "time__now",
+    label: "current_time",
+    description:
+      "Return the current date/time in a given IANA timezone (default UTC), in ISO and human form.",
+    parameters: {
+      type: "object",
+      properties: { timezone: { type: "string", description: "IANA tz, e.g. 'America/New_York'. Default UTC." } },
+    },
+    async execute(_id, params) {
+      const tz = (params as { timezone?: string }).timezone ?? "UTC";
+      try {
+        const now = new Date();
+        const human = new Intl.DateTimeFormat("en-US", { timeZone: tz, dateStyle: "full", timeStyle: "long" }).format(now);
+        return { content: [{ type: "text", text: `${tz}: ${now.toISOString()} (${human})` }], details: { iso: now.toISOString(), tz } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Bad timezone: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function timeConvertTool(): ToolDefinition {
+  return defineTool({
+    name: "time__convert",
+    label: "convert_time",
+    description: "Convert an ISO time between timezones, or format it.",
+    parameters: {
+      type: "object",
+      properties: {
+        iso: { type: "string", description: "ISO 8601 timestamp." },
+        toTimezone: { type: "string" },
+      },
+      required: ["iso", "toTimezone"],
+    },
+    async execute(_id, params) {
+      const { iso, toTimezone } = params as { iso: string; toTimezone: string };
+      try {
+        const d = new Date(iso);
+        const human = new Intl.DateTimeFormat("en-US", { timeZone: toTimezone, dateStyle: "full", timeStyle: "long" }).format(d);
+        return { content: [{ type: "text", text: `${iso} (UTC) -> ${toTimezone}: ${human}` }], details: { iso, toTimezone } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Convert failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- calc connector ----
+function calcEvalTool(): ToolDefinition {
+  return defineTool({
+    name: "calc__eval",
+    label: "evaluate",
+    description:
+      "Safely evaluate an arithmetic expression (+ - * / % ** and parentheses, plus numbers). " +
+      "Returns the numeric result. No variables or functions.",
+    parameters: {
+      type: "object",
+      properties: { expression: { type: "string", description: "e.g. '(12 * 8 + 4) / 2'." } },
+      required: ["expression"],
+    },
+    async execute(_id, params) {
+      const { expression } = params as { expression: string };
+      // Strict allowlist: digits, operators, parens, decimal point, whitespace.
+      if (!/^[\d+\-*/%().\s]+$/.test(expression)) {
+        return { content: [{ type: "text", text: "Only arithmetic operators and numbers are allowed." }], details: {}, isError: true };
+      }
+      try {
+        // eslint-disable-next-line no-new-func
+        const result = Function(`"use strict"; return (${expression});`)();
+        return { content: [{ type: "text", text: `${expression} = ${result}` }], details: { expression, result } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Evaluation failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function calcStatsTool(): ToolDefinition {
+  return defineTool({
+    name: "calc__stats",
+    label: "statistics",
+    description: "Compute summary statistics (count, sum, mean, min, max, median) for a list of numbers.",
+    parameters: {
+      type: "object",
+      properties: { numbers: { type: "array", items: { type: "number" } } },
+      required: ["numbers"],
+    },
+    async execute(_id, params) {
+      const arr = (params as { numbers: number[] }).numbers ?? [];
+      if (!arr.length) return { content: [{ type: "text", text: "No numbers provided." }], details: {}, isError: true };
+      const sorted = [...arr].sort((a, b) => a - b);
+      const sum = arr.reduce((a, b) => a + b, 0);
+      const mean = sum / arr.length;
+      const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+      const stats = { count: arr.length, sum, mean, min: sorted[0], max: sorted[sorted.length - 1], median };
+      return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }], details: stats };
+    },
+  });
+}
+
+// ---- sqlite connector ----
+function sqliteQueryTool(): ToolDefinition {
+  return defineTool({
+    name: "sqlite__query",
+    label: "query",
+    description:
+      "Run a read-only SQL query against a local SQLite database file and return rows as text/JSON. " +
+      "Uses node:sqlite if available; falls back to the sqlite3 CLI.",
+    parameters: {
+      type: "object",
+      properties: {
+        database: { type: "string", description: "Absolute path to the .db/.sqlite file." },
+        sql: { type: "string", description: "SELECT query (read-only)." },
+      },
+      required: ["database", "sql"],
+    },
+    async execute(_id, params) {
+      const { database, sql } = params as { database: string; sql: string };
+      // Refuse anything that isn't a SELECT (defense-in-depth).
+      if (!/^\s*select\b/i.test(sql)) {
+        return { content: [{ type: "text", text: "Only SELECT queries are allowed." }], details: {}, isError: true };
+      }
+      try {
+        // Prefer the sqlite3 CLI for portability (commonly installed).
+        const { execFile } = await import("node:child_process");
+        const out = await new Promise<string>((resolve, reject) => {
+          execFile("sqlite3", ["-json", database, sql], { timeout: 15000 }, (err, stdout) => {
+            if (err) reject(err);
+            else resolve(stdout);
+          });
+        });
+        return { content: [{ type: "text", text: out || "(no rows)" }], details: {} };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Query failed (is sqlite3 installed?): ${e?.message}` }], details: {}, isError: true };
       }
     },
   });

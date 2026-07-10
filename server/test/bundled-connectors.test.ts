@@ -17,28 +17,66 @@ afterEach(async () => {
 });
 
 describe("bundled default connectors", () => {
-  it("seedDefaults registers fetch + fs connectors as connected", async () => {
+  it("seedDefaults registers all bundled connectors as connected", async () => {
     await mgr.seedDefaults();
     const list = mgr.list();
     const ids = list.map((c) => c.id);
-    expect(ids).toEqual(expect.arrayContaining(["fetch", "fs"]));
-    expect(list.find((c) => c.id === "fetch")?.status).toBe("connected");
-    expect(list.find((c) => c.id === "fs")?.status).toBe("connected");
+    expect(ids).toEqual(expect.arrayContaining(["fetch", "fs", "time", "calc", "sqlite"]));
+    for (const id of ["fetch", "fs", "time", "calc", "sqlite"]) {
+      expect(list.find((c) => c.id === id)?.status).toBe("connected");
+    }
   });
 
-  it("seedDefaults exposes 4 connector tools (fetch + 3 fs)", async () => {
+  it("seedDefaults exposes 9 connector tools across 5 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
-      expect.arrayContaining(["fetch__fetch", "fs__read_file", "fs__write_file", "fs__list_dir"]),
+      expect.arrayContaining([
+        "fetch__fetch",
+        "fs__read_file", "fs__write_file", "fs__list_dir",
+        "time__now", "time__convert",
+        "calc__eval", "calc__stats",
+        "sqlite__query",
+      ]),
     );
-    expect(names.length).toBe(4);
+    expect(names.length).toBe(9);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(4);
+    expect(mgr.getToolNames().length).toBe(9);
+  });
+
+  it("time__now returns the current time in a timezone", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "time__now")!;
+    const res = await t.execute("tc1", { timezone: "UTC" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("UTC");
+    expect((res.content[0] as any).text).toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("calc__eval evaluates arithmetic", async () => {
+    await mgr.seedDefaults();
+    const c = mgr.getConnectedTools().find((x) => x.name === "calc__eval")!;
+    const res = await c.execute("tc1", { expression: "(12 * 8 + 4) / 2" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("50");
+  });
+
+  it("calc__eval rejects non-arithmetic input", async () => {
+    await mgr.seedDefaults();
+    const c = mgr.getConnectedTools().find((x) => x.name === "calc__eval")!;
+    const res = await c.execute("tc1", { expression: "process.exit(1)" }, undefined, undefined, {} as any);
+    expect(res.isError).toBe(true);
+  });
+
+  it("calc__stats computes summary statistics", async () => {
+    await mgr.seedDefaults();
+    const c = mgr.getConnectedTools().find((x) => x.name === "calc__stats")!;
+    const res = await c.execute("tc1", { numbers: [1, 2, 3, 4, 100] }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain('"count": 5');
+    expect(text).toContain('"median": 3');
   });
 
   it("fs__write_file + fs__read_file round-trip works", async () => {
