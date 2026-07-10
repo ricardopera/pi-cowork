@@ -41,7 +41,7 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 **Extensibility & automation**
 - **MCP connectors** — connect to any MCP server (stdio / HTTP / SSE); its tools become agent tools. Managed via REST.
 - **Slash commands** — `/help`, `/todo`, `/doc`, `/research`, `/memory`, `/clear`, `/stop` (extensible registry)
-- **Skills** — markdown skill files (with frontmatter), managed via REST, loaded by Pi Agent from `.agents/skills/`. 67 starter skills seeded.
+- **Skills** — markdown skill files (with frontmatter), managed via REST, loaded by Pi Agent from `.agents/skills/`. 139 starter skills seeded (incl. 46 official Anthropic skills, Apache-2.0).
 - **Scheduled tasks** — cron expressions or one-shot `fireAt`; run autonomously on a tick
 - **Projects** — named, persistent workspaces (outputs / memory / skills / custom instructions scoped per project)
 

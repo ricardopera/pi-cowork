@@ -33,11 +33,15 @@ describe("skills manager", () => {
     );
   });
 
-  it("seeds the expanded knowledge-worker skill set (>= 50)", async () => {
+  it("seeds the expanded knowledge-worker skill set (>= 100)", async () => {
     const m = mgr();
     await m.seedBuiltin();
     const names = (await m.list()).map((s) => s.name);
-    expect(names.length).toBeGreaterThanOrEqual(50);
+    expect(names.length).toBeGreaterThanOrEqual(100);
+    // Official Anthropic skills (Apache-2.0, attributed) are included.
+    expect(names.some((n) => /Anthropic/.test(n))).toBe(true);
+    // The third-party notices file must NOT seed as a skill.
+    expect(names.some((n) => /third.party|notices/i.test(n))).toBe(false);
     expect(names).toEqual(
       expect.arrayContaining([
         "Draft an Email",

@@ -152,6 +152,8 @@ export class SkillsManager {
     const bundledDir = path.join(getStarterSkillsDir());
     const files = await listDir(bundledDir);
     for (const name of files) {
+      // Skip non-skill docs (notices/readme/license) — only seed actual skills.
+      if (/^(THIRD_PARTY_NOTICES|README|LICENSE|CHANGELOG)\.md$/i.test(name)) continue;
       const dest = path.join(this.globalDir, name);
       if (await fs.stat(dest).catch(() => null)) continue; // don't overwrite
       const content = await fs.readFile(path.join(bundledDir, name), "utf8").catch(() => "");
