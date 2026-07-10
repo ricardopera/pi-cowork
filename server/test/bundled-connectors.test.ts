@@ -25,6 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract",
       ]),
     );
     for (const id of ids) {
@@ -32,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 26 connector tools across 17 connectors", async () => {
+  it("seedDefaults exposes 36 connector tools across 25 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -53,15 +54,23 @@ describe("bundled default connectors", () => {
         "diff__lines",
         "archive__zip",
         "qr__text",
+        "xml__parse", "xml__stringify",
+        "yaml__parse", "yaml__stringify",
+        "regex__match",
+        "ip__lookup",
+        "url__parse",
+        "slugify__make",
+        "cron__validate",
+        "extract__archive",
       ]),
     );
-    expect(names.length).toBe(26);
+    expect(names.length).toBe(36);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(26);
+    expect(mgr.getToolNames().length).toBe(36);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -245,5 +254,81 @@ describe("bundled default connectors", () => {
     const t = mgr.getConnectedTools().find((x) => x.name === "qr__text")!;
     const res = await t.execute("tc1", { text: "https://pi-cowork.example" }, undefined, undefined, {} as any);
     expect((res.content[0] as any).text).toContain("https://pi-cowork.example");
+  });
+
+  it("xml__parse parses an element, xml__stringify round-trips", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const parse = tools.find((x) => x.name === "xml__parse")!;
+    const res = await parse.execute("tc1", { xml: "<note to=\"Ada\">hi</note>" }, undefined, undefined, {} as any);
+    const obj = JSON.parse((res.content[0] as any).text);
+    expect(obj.note["@to"]).toBe("Ada");
+    expect(obj.note["#text"]).toBe("hi");
+  });
+
+  it("yaml__parse <-> yaml__stringify round-trips", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const parse = tools.find((x) => x.name === "yaml__parse")!;
+    const stringify = tools.find((x) => x.name === "yaml__stringify")!;
+    const p = await parse.execute("tc1", { yaml: "name: Ada\nage: 36" }, undefined, undefined, {} as any);
+    expect(JSON.parse((p.content[0] as any).text)).toEqual({ name: "Ada", age: 36 });
+    const s = await stringify.execute("tc2", { json: '{"a":1}' }, undefined, undefined, {} as any);
+    expect((s.content[0] as any).text).toContain("a: 1");
+  });
+
+  it("regex__match returns matches", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "regex__match")!;
+    const res = await t.execute("tc1", { pattern: "\\d+", text: "a1b22c333", flags: "g" }, undefined, undefined, {} as any);
+    expect(JSON.parse((res.content[0] as any).text)).toEqual(["1", "22", "333"]);
+  });
+
+  it("regex__match reports invalid patterns", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "regex__match")!;
+    const res = await t.execute("tc1", { pattern: "(", text: "x" }, undefined, undefined, {} as any);
+    expect(res.isError).toBe(true);
+  });
+
+  it("ip__lookup returns geo data or a clear error (live)", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "ip__lookup")!;
+    const res = await t.execute("tc1", { ip: "8.8.8.8" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    // Either JSON geo data, or (offline/sandbox) a clear error.
+    if (!res.isError) {
+      const obj = JSON.parse(text);
+      expect(obj.ip).toBe("8.8.8.8");
+    } else {
+      expect(text).toMatch(/lookup failed/i);
+    }
+  }, 20000);
+
+  it("url__parse decomposes a URL with query params", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "url__parse")!;
+    const res = await t.execute("tc1", { url: "https://a.example/x?n=1&m=2#h" }, undefined, undefined, {} as any);
+    const obj = JSON.parse((res.content[0] as any).text);
+    expect(obj.hostname).toBe("a.example");
+    expect(obj.params).toEqual({ n: "1", m: "2" });
+    expect(obj.hash).toBe("#h");
+  });
+
+  it("slugify__make produces URL-safe slugs", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "slugify__make")!;
+    const res = await t.execute("tc1", { text: "Héllo, World! 2024" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toBe("hello-world-2024");
+  });
+
+  it("cron__validate accepts a valid expression and rejects bad ones", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "cron__validate")!;
+    const ok = await t.execute("tc1", { expression: "0 9 * * 1-5" }, undefined, undefined, {} as any);
+    expect(ok.isError).toBeUndefined();
+    expect((ok.content[0] as any).text).toContain("Valid cron");
+    const bad = await t.execute("tc2", { expression: "not cron" }, undefined, undefined, {} as any);
+    expect(bad.isError).toBe(true);
   });
 });

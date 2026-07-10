@@ -311,6 +311,62 @@ class McpConnectorManager {
         tools: [qrTool()],
       });
     }
+    if (!this.connectors.has("xml")) {
+      this.connectors.set("xml", {
+        config: { id: "xml", name: "XML (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [xmlParseTool(), xmlStringifyTool()],
+      });
+    }
+    if (!this.connectors.has("yaml")) {
+      this.connectors.set("yaml", {
+        config: { id: "yaml", name: "YAML (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [yamlParseTool(), yamlStringifyTool()],
+      });
+    }
+    if (!this.connectors.has("regex")) {
+      this.connectors.set("regex", {
+        config: { id: "regex", name: "Regex (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [regexTool()],
+      });
+    }
+    if (!this.connectors.has("ip")) {
+      this.connectors.set("ip", {
+        config: { id: "ip", name: "IP lookup (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [ipLookupTool()],
+      });
+    }
+    if (!this.connectors.has("url")) {
+      this.connectors.set("url", {
+        config: { id: "url", name: "URL parse (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [urlParseTool()],
+      });
+    }
+    if (!this.connectors.has("slugify")) {
+      this.connectors.set("slugify", {
+        config: { id: "slugify", name: "Slugify (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [slugifyTool()],
+      });
+    }
+    if (!this.connectors.has("cron")) {
+      this.connectors.set("cron", {
+        config: { id: "cron", name: "Cron validate (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [cronValidateTool()],
+      });
+    }
+    if (!this.connectors.has("extract")) {
+      this.connectors.set("extract", {
+        config: { id: "extract", name: "Extract archive (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [extractTool()],
+      });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -1055,6 +1111,431 @@ function qrTool(): ToolDefinition {
         "(Install a QR renderer or use the sandbox for a scannable PNG of this payload.)",
       ];
       return { content: [{ type: "text", text: lines.join("\n") }], details: { payloadLength: text.length } };
+    },
+  });
+}
+
+// ---- xml connector (parse <-> JS object) ----
+// Minimal, dependency-free XML <-> object. Handles common cases (attributes
+// via @, text via #text, nested children). Not a full XSD validator.
+function xmlParseTool(): ToolDefinition {
+  return defineTool({
+    name: "xml__parse",
+    label: "parse",
+    description: "Parse XML text into a JS object (attributes as @attr, text as #text).",
+    parameters: {
+      type: "object",
+      properties: { xml: { type: "string" } },
+      required: ["xml"],
+    },
+    async execute(_id, params) {
+      const { xml } = params as { xml: string };
+      try {
+        const obj = xmlToObject(xml);
+        return { content: [{ type: "text", text: JSON.stringify(obj, null, 2) }], details: { ok: true } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `XML parse failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function xmlStringifyTool(): ToolDefinition {
+  return defineTool({
+    name: "xml__stringify",
+    label: "stringify",
+    description: "Convert a JS object (from xml__parse) back into XML text.",
+    parameters: {
+      type: "object",
+      properties: { object: {} },
+      required: ["object"],
+    },
+    async execute(_id, params) {
+      const { root, ...rest } = params as any;
+      try {
+        // Accept either { root: {...} } or a bare object.
+        const top = root ? { [root]: rest.root ?? rest } : rest;
+        const xml = objectToXml(top, 0);
+        return { content: [{ type: "text", text: `<?xml version="1.0"?>\n${xml}` }], details: { ok: true } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `XML stringify failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// Tiny XML parser -> nested object. Tolerant of text/attributes/children.
+function xmlToObject(xml: string): any {
+  const doc = xml.trim();
+  const result: any = {};
+  const re = /<(\w+)([^>]*)>([\s\S]*?)<\/\1>|<(\w+)([^>]*)\/>/g;
+  let m: RegExpExecArray | null;
+  let matched = false;
+  while ((m = re.exec(doc)) !== null) {
+    matched = true;
+    const tag = m[1] ?? m[4];
+    const attrStr = (m[2] ?? m[5] ?? "").trim();
+    const inner = (m[3] ?? "").trim();
+    const attrs: Record<string, string> = {};
+    const are = /(\w+)="([^"]*)"/g;
+    let am: RegExpExecArray | null;
+    while ((am = are.exec(attrStr)) !== null) attrs[`@${am[1]}`] = am[2];
+    let child: any;
+    if (/<\w+/.test(inner)) {
+      child = { ...attrs, ...xmlToObject(inner) };
+    } else {
+      child = inner.length ? { ...attrs, "#text": inner } : { ...attrs };
+      if (Object.keys(child).length === 1 && child["#text"] !== undefined) child = child["#text"];
+    }
+    if (tag in result) {
+      if (!Array.isArray(result[tag])) result[tag] = [result[tag]];
+      result[tag].push(child);
+    } else {
+      result[tag] = child;
+    }
+  }
+  return matched ? result : doc;
+}
+
+function objectToXml(obj: any, depth: number): string {
+  const pad = "  ".repeat(depth);
+  if (obj === null || obj === undefined) return "";
+  if (typeof obj !== "object") return String(obj);
+  return Object.entries(obj)
+    .map(([k, v]) => {
+      if (k === "#text") return String(v);
+      if (k.startsWith("@")) return ""; // attributes handled at parent
+      const vals = Array.isArray(v) ? v : [v];
+      return vals
+        .map((val: any) => {
+          if (val === null || val === undefined) return `${pad}<${k}/>`;
+          if (typeof val === "object") {
+            const attrs = Object.keys(val)
+              .filter((kk) => kk.startsWith("@"))
+              .map((kk) => ` ${kk.slice(1)}="${val[kk]}"`)
+              .join("");
+            const inner = objectToXml(val, depth + 1).trim();
+            return inner ? `${pad}<${k}${attrs}>\n${inner}\n${pad}</${k}>` : `${pad}<${k}${attrs}/>`;
+          }
+          return `${pad}<${k}>${String(val)}</${k}>`;
+        })
+        .join("\n");
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+// ---- yaml connector (simple flat mapping parser; no external dependency) ----
+function yamlParseTool(): ToolDefinition {
+  return defineTool({
+    name: "yaml__parse",
+    label: "parse",
+    description: "Parse simple (flat or indented) YAML into JSON. Supports key:value, lists (- item), and nesting via indentation.",
+    parameters: {
+      type: "object",
+      properties: { yaml: { type: "string" } },
+      required: ["yaml"],
+    },
+    async execute(_id, params) {
+      const { yaml } = params as { yaml: string };
+      try {
+        const obj = parseSimpleYaml(yaml);
+        return { content: [{ type: "text", text: JSON.stringify(obj, null, 2) }], details: { ok: true } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `YAML parse failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function yamlStringifyTool(): ToolDefinition {
+  return defineTool({
+    name: "yaml__stringify",
+    label: "stringify",
+    description: "Convert a JSON string into simple YAML text (key: value, with lists and nesting).",
+    parameters: {
+      type: "object",
+      properties: { json: { type: "string", description: "A JSON string to stringify as YAML." } },
+      required: ["json"],
+    },
+    async execute(_id, params) {
+      const { json } = params as { json: string };
+      try {
+        const obj = JSON.parse(json);
+        return { content: [{ type: "text", text: stringifySimpleYaml(obj, 0) }], details: { ok: true } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `YAML stringify failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// Minimal indentation-aware YAML parser (flat + nested maps, `- item` lists).
+function parseSimpleYaml(text: string): any {
+  const lines = text.split(/\r?\n/).filter((l) => !/^\s*#/.test(l) && l.trim().length);
+  const parseNode = (idx: { i: number }, indent: number): any => {
+    const node: any = {};
+    let isList = false;
+    while (idx.i < lines.length) {
+      const raw = lines[idx.i];
+      const m = raw.match(/^(\s*)/);
+      const curIndent = m ? m[1].length : 0;
+      if (curIndent < indent) break;
+      if (curIndent > indent) {
+        idx.i++;
+        continue;
+      }
+      const trimmed = raw.trim();
+      if (trimmed.startsWith("- ")) {
+        isList = true;
+        const val = trimmed.slice(2).trim();
+        if (!Array.isArray(node._list)) node._list = [];
+        if (val.includes(":")) {
+          const [k, v] = val.split(":");
+          node._list.push({ [k.trim()]: parseScalar(v.trim()) });
+        } else {
+          node._list.push(parseScalar(val));
+        }
+        idx.i++;
+      } else if (trimmed.includes(":")) {
+        const ci = trimmed.indexOf(":");
+        const key = trimmed.slice(0, ci).trim();
+        const val = trimmed.slice(ci + 1).trim();
+        if (val === "") {
+          idx.i++;
+          const child = parseNode(idx, indent + 2);
+          node[key] = child._list ?? child;
+        } else {
+          node[key] = parseScalar(val);
+          idx.i++;
+        }
+      } else {
+        idx.i++;
+      }
+    }
+    return isList ? { _list: node._list } : node;
+  };
+  const result = parseNode({ i: 0 }, 0);
+  return result._list ?? result;
+}
+
+function parseScalar(v: string): any {
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (v === "null") return null;
+  if (/^-?\d+$/.test(v)) return parseInt(v, 10);
+  if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
+  return v.replace(/^["']|["']$/g, "");
+}
+
+function stringifySimpleYaml(obj: any, indent: number): string {
+  const pad = "  ".repeat(indent);
+  return Object.entries(obj)
+    .map(([k, v]) => {
+      if (Array.isArray(v)) {
+        return `${pad}${k}:\n${v.map((item) => `${pad}  - ${typeof item === "object" ? JSON.stringify(item) : item}`).join("\n")}`;
+      }
+      if (v !== null && typeof v === "object") {
+        return `${pad}${k}:\n${stringifySimpleYaml(v, indent + 1)}`;
+      }
+      return `${pad}${k}: ${v}`;
+    })
+    .join("\n");
+}
+
+// ---- regex connector ----
+function regexTool(): ToolDefinition {
+  return defineTool({
+    name: "regex__match",
+    label: "match",
+    description: "Run a regex against text. Returns all matches (groups) or 'no match'. flags default ''.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string" },
+        text: { type: "string" },
+        flags: { type: "string", description: "e.g. 'gi'. Default ''." },
+      },
+      required: ["pattern", "text"],
+    },
+    async execute(_id, params) {
+      const { pattern, text, flags } = params as { pattern: string; text: string; flags?: string };
+      try {
+        const re = new RegExp(pattern, flags ?? "");
+        const matches: any[] = [];
+        if (flags?.includes("g")) {
+          let m: RegExpExecArray | null;
+          while ((m = re.exec(text)) !== null) {
+            matches.push(m[0]);
+            if (m.index === re.lastIndex) re.lastIndex++;
+          }
+        } else {
+          const m = re.exec(text);
+          if (m) matches.push(m[0]);
+        }
+        return {
+          content: [{ type: "text", text: matches.length ? JSON.stringify(matches, null, 2) : "(no match)" }],
+          details: { count: matches.length },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Invalid regex: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- ip-lookup connector (live, via ipapi.co) ----
+function ipLookupTool(): ToolDefinition {
+  return defineTool({
+    name: "ip__lookup",
+    label: "lookup",
+    description: "Look up geolocation/network info for an IP (or your own if omitted). Live via ipapi.co.",
+    parameters: {
+      type: "object",
+      properties: { ip: { type: "string", description: "IPv4/IPv6. Omit for the caller's IP." } },
+    },
+    async execute(_id, params) {
+      const { ip } = (params as { ip?: string }) ?? {};
+      try {
+        const url = ip ? `https://ipapi.co/${encodeURIComponent(ip)}/json/` : "https://ipapi.co/json/";
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) as any });
+        const data = await res.json();
+        const out = { ip: data.ip, city: data.city, region: data.region, country: data.country_name, org: data.org };
+        return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }], details: out };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `IP lookup failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- url-parse connector ----
+function urlParseTool(): ToolDefinition {
+  return defineTool({
+    name: "url__parse",
+    label: "parse",
+    description: "Parse a URL into protocol, host, path, query params, hash.",
+    parameters: {
+      type: "object",
+      properties: { url: { type: "string" } },
+      required: ["url"],
+    },
+    async execute(_id, params) {
+      const { url } = params as { url: string };
+      try {
+        const u = new URL(url);
+        const paramsObj: Record<string, string> = {};
+        u.searchParams.forEach((v, k) => (paramsObj[k] = v));
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(
+              { protocol: u.protocol, host: u.host, hostname: u.hostname, port: u.port, pathname: u.pathname, search: u.search, params: paramsObj, hash: u.hash },
+              null,
+              2,
+            ),
+          }],
+          details: {},
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Invalid URL: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- slugify connector ----
+function slugifyTool(): ToolDefinition {
+  return defineTool({
+    name: "slugify__make",
+    label: "slugify",
+    description: "Convert text to a URL-safe slug (lowercase, hyphenated, ASCII).",
+    parameters: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const slug = text
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      return { content: [{ type: "text", text: slug }], details: { slug } };
+    },
+  });
+}
+
+// ---- cron-validate connector ----
+function cronValidateTool(): ToolDefinition {
+  return defineTool({
+    name: "cron__validate",
+    label: "validate",
+    description: "Validate a 5-field cron expression and explain each field.",
+    parameters: {
+      type: "object",
+      properties: { expression: { type: "string" } },
+      required: ["expression"],
+    },
+    async execute(_id, params) {
+      const { expression } = params as { expression: string };
+      const fields = expression.trim().split(/\s+/);
+      const ranges = [
+        { name: "minute", min: 0, max: 59 },
+        { name: "hour", min: 0, max: 23 },
+        { name: "day-of-month", min: 1, max: 31 },
+        { name: "month", min: 1, max: 12 },
+        { name: "day-of-week", min: 0, max: 7 },
+      ];
+      if (fields.length !== 5) {
+        return { content: [{ type: "text", text: `Invalid: expected 5 fields, got ${fields.length}.` }], details: {}, isError: true };
+      }
+      const fieldRe = /^(\*|\d+(-\d+)?(,\d+(-\d+)?)*|\*\/\d+|\d+\/\d+)$/;
+      for (let i = 0; i < 5; i++) {
+        if (!fieldRe.test(fields[i])) {
+          return { content: [{ type: "text", text: `Invalid ${ranges[i].name} field: "${fields[i]}".` }], details: {}, isError: true };
+        }
+      }
+      return {
+        content: [{ type: "text", text: `Valid cron: ${expression}\n${ranges.map((r, i) => `  ${r.name}: ${fields[i]}`).join("\n")}` }],
+        details: { valid: true },
+      };
+    },
+  });
+}
+
+// ---- extract archive connector (tar/zip/unzip via system CLI) ----
+function extractTool(): ToolDefinition {
+  return defineTool({
+    name: "extract__archive",
+    label: "extract",
+    description: "Extract a .tar.gz/.tar/.zip/.tgz archive into a directory. Uses system tar/unzip.",
+    parameters: {
+      type: "object",
+      properties: {
+        archive: { type: "string", description: "Absolute path to the archive." },
+        dest: { type: "string", description: "Absolute directory to extract into." },
+      },
+      required: ["archive", "dest"],
+    },
+    async execute(_id, params) {
+      const { archive, dest } = params as { archive: string; dest: string };
+      const { execFile } = await import("node:child_process");
+      const fsP = await import("node:fs/promises");
+      await fsP.mkdir(dest, { recursive: true }).catch(() => {});
+      const isZip = /\.zip$/i.test(archive);
+      const ok = await new Promise<boolean>((resolve) => {
+        const cmd = isZip ? "unzip" : "tar";
+        const args = isZip ? ["-o", "-q", archive, "-d", dest] : ["-xf", archive, "-C", dest];
+        execFile(cmd, args, { timeout: 30000 }, (err) => resolve(!err));
+      });
+      if (!ok) {
+        return { content: [{ type: "text", text: `Extraction failed (is '${isZip ? "unzip" : "tar"}' installed?).` }], details: {}, isError: true };
+      }
+      const entries = await fsP.readdir(dest).catch(() => []);
+      return { content: [{ type: "text", text: `Extracted to ${dest} (${entries.length} entries).` }], details: { count: entries.length } };
     },
   });
 }
