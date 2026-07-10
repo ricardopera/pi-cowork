@@ -17,9 +17,12 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 
 > **Works out of the box, no key required:** Pi-Cowork ships with a keyless **OpenCode Zen** free provider (DeepSeek V4 Flash et al.) as the default model, so chat streams real responses immediately. Add any of the four keyed providers above for stronger models.
 
+> **Runs as a desktop app or in the browser:** `npm run build:desktop && npm run desktop` launches the Electron shell (native window chrome, the server as a child process); `npm run dev` runs the web app for development.
+
 ## Features (feature-parity with Cowork)
 
 **Agentic core**
+- **Desktop app (Electron)** + web app: `npm run desktop` opens a native window that spawns the server and loads the built UI — matching Cowork's desktop-app model
 - Chat UI with streaming markdown, thinking display, and collapsible tool cards
 - Pi Agent embedded in-process: `createAgentSession` → `subscribe()` events → WebSocket → browser
 - All four providers configurable; live model catalogs per provider

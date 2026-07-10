@@ -1,5 +1,5 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent/dist/core/extensions/types.js";
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { TodoItem } from "../event-schema.js";
 
 /**

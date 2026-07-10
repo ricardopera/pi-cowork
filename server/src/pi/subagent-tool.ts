@@ -1,7 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent/dist/core/extensions/types.js";
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import { getAuthStorage, getModelRegistry } from "./providers.js";

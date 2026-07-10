@@ -1,0 +1,14 @@
+{
+  "name": "@pi-cowork/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pi-Cowork native desktop shell (Electron).",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "echo 'electron main has no build step; run build:desktop from root'"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

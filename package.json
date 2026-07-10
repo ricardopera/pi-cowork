@@ -2,17 +2,27 @@
   "name": "pi-cowork",
   "private": true,
   "type": "module",
-  "workspaces": ["server", "web", "e2e"],
+  "workspaces": [
+    "server",
+    "web",
+    "e2e",
+    "electron"
+  ],
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm -w server run dev",
     "dev:web": "npm -w web run dev",
-    "build": "npm -w web run build",
+    "build": "npm -w web run build && npm -w server run build",
+    "build:desktop": "npm -w web run build && npm -w server run build",
+    "desktop": "npm -w @pi-cowork/desktop run start",
     "test": "npm -w server run test",
     "e2e": "npm -w e2e run test"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
     "typescript": "^5.6.0"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
   }
 }

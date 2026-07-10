@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent/dist/core/extensions/types.js";
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { PresentedFile } from "../event-schema.js";
 
 /**

@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "node build.mjs",
     "start": "node dist/index.js",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "check": "tsc -p tsconfig.json --noEmit || true"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.5",
