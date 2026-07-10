@@ -711,6 +711,91 @@ class McpConnectorManager {
       });
 
     }
+    if (!this.connectors.has("mdlinks")) {
+      this.connectors.set("mdlinks", {
+        config: { id: "mdlinks", name: "Markdown links (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [mdLinksTool()],
+      });
+    }
+    if (!this.connectors.has("diffsum")) {
+      this.connectors.set("diffsum", {
+        config: { id: "diffsum", name: "Diff summary (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [diffSummaryTool()],
+      });
+    }
+    if (!this.connectors.has("numwords")) {
+      this.connectors.set("numwords", {
+        config: { id: "numwords", name: "Number to words (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [numberToWordsTool()],
+      });
+    }
+    if (!this.connectors.has("ordinal")) {
+      this.connectors.set("ordinal", {
+        config: { id: "ordinal", name: "Ordinal (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [ordinalTool()],
+      });
+    }
+    if (!this.connectors.has("prime")) {
+      this.connectors.set("prime", {
+        config: { id: "prime", name: "Prime check (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [primeCheckTool()],
+      });
+    }
+    if (!this.connectors.has("mathops")) {
+      this.connectors.set("mathops", {
+        config: { id: "mathops", name: "GCD/LCM (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [gcdLcmTool()],
+      });
+    }
+    if (!this.connectors.has("pct")) {
+      this.connectors.set("pct", {
+        config: { id: "pct", name: "Percentage (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [percentageTool()],
+      });
+    }
+    if (!this.connectors.has("ratio")) {
+      this.connectors.set("ratio", {
+        config: { id: "ratio", name: "Ratio simplify (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [ratioSimplifyTool()],
+      });
+    }
+    if (!this.connectors.has("stemmer")) {
+      this.connectors.set("stemmer", {
+        config: { id: "stemmer", name: "Porter stemmer (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [porterStemmerTool()],
+      });
+    }
+    if (!this.connectors.has("ngram")) {
+      this.connectors.set("ngram", {
+        config: { id: "ngram", name: "N-gram (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [ngramTool()],
+      });
+    }
+    if (!this.connectors.has("wrap")) {
+      this.connectors.set("wrap", {
+        config: { id: "wrap", name: "Text wrap (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [textWrapTool()],
+      });
+    }
+    if (!this.connectors.has("colalign")) {
+      this.connectors.set("colalign", {
+        config: { id: "colalign", name: "Column align (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [columnAlignTool()],
+      });
+    }
+
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -3040,6 +3125,228 @@ function stringDistTool(): ToolDefinition {
       for (let j = 0; j <= n; j++) dp[0][j] = j;
       for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
       return { content: [{ type: "text", text: `Levenshtein("${a}","${b}") = ${dp[m][n]}` }], details: { distance: dp[m][n] } };
+    },
+  });
+}
+
+// ---- markdown-links-extract connector ----
+function mdLinksTool(): ToolDefinition {
+  return defineTool({
+    name: "mdlinks__extract",
+    label: "extract",
+    description: "Extract all links [text](url) from Markdown text.",
+    parameters: { type: "object", properties: { markdown: { type: "string" } }, required: ["markdown"] },
+    async execute(_id, params) {
+      const { markdown } = params as { markdown: string };
+      const links: { text: string; url: string }[] = [];
+      const re = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(markdown)) !== null) links.push({ text: m[1], url: m[2] });
+      return { content: [{ type: "text", text: links.length ? links.map((l) => `${l.text}: ${l.url}`).join("\n") : "(no links)" }], details: { count: links.length } };
+    },
+  });
+}
+
+// ---- text-diff-summary connector ----
+function diffSummaryTool(): ToolDefinition {
+  return defineTool({
+    name: "diffsum__summarize",
+    label: "summarize",
+    description: "Summarize the diff between two text strings (added/removed/changed counts).",
+    parameters: { type: "object", properties: { a: { type: "string" }, b: { type: "string" } }, required: ["a", "b"] },
+    async execute(_id, params) {
+      const { a, b } = params as { a: string; b: string };
+      const al = new Set(a.split(/\r?\n/));
+      const bl = new Set(b.split(/\r?\n/));
+      const added = [...bl].filter((l) => !al.has(l)).length;
+      const removed = [...al].filter((l) => !bl.has(l)).length;
+      const unchanged = [...al].filter((l) => bl.has(l)).length;
+      return { content: [{ type: "text", text: `${added} added, ${removed} removed, ${unchanged} unchanged` }], details: { added, removed, unchanged } };
+    },
+  });
+}
+
+// ---- number-to-words connector ----
+function numberToWordsTool(): ToolDefinition {
+  return defineTool({
+    name: "numwords__convert",
+    label: "convert",
+    description: "Convert a number (0-999999) to its English word form.",
+    parameters: { type: "object", properties: { number: { type: "number" } }, required: ["number"] },
+    async execute(_id, params) {
+      const n = (params as { number: number }).number;
+      if (n < 0 || n > 999999 || !Number.isInteger(n)) return { content: [{ type: "text", text: "Must be integer 0-999999." }], details: {}, isError: true };
+      const ones = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
+      const tens = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+      const two = (num: number): string => num < 20 ? ones[num] : tens[Math.floor(num/10)] + (num%10 ? "-" + ones[num%10] : "");
+      const three = (num: number): string => num < 100 ? two(num) : ones[Math.floor(num/100)] + " hundred" + (num%100 ? " " + two(num%100) : "");
+      const words = n < 1000 ? three(n) : three(Math.floor(n/1000)) + " thousand" + (n%1000 ? " " + three(n%1000) : "");
+      return { content: [{ type: "text", text: words }], details: { words } };
+    },
+  });
+}
+
+// ---- ordinal connector ----
+function ordinalTool(): ToolDefinition {
+  return defineTool({
+    name: "ordinal__convert",
+    label: "convert",
+    description: "Convert a number to its ordinal form (1st, 2nd, 3rd, 4th...).",
+    parameters: { type: "object", properties: { number: { type: "number" } }, required: ["number"] },
+    async execute(_id, params) {
+      const n = (params as { number: number }).number;
+      const s = ["th","st","nd","rd"];
+      const v = Math.abs(n) % 100;
+      const ord = n + (s[(v - 20) % 10] || s[v] || s[0]);
+      return { content: [{ type: "text", text: ord }], details: { ordinal: ord } };
+    },
+  });
+}
+
+// ---- prime-check connector ----
+function primeCheckTool(): ToolDefinition {
+  return defineTool({
+    name: "prime__check",
+    label: "check",
+    description: "Check if a number is prime.",
+    parameters: { type: "object", properties: { number: { type: "number" } }, required: ["number"] },
+    async execute(_id, params) {
+      const n = (params as { number: number }).number;
+      if (n < 2 || !Number.isInteger(n)) return { content: [{ type: "text", text: `${n} is NOT prime (must be integer >= 2).` }], details: { isPrime: false } };
+      for (let i = 2; i * i <= n; i++) if (n % i === 0) return { content: [{ type: "text", text: `${n} is NOT prime (divisible by ${i}).` }], details: { isPrime: false, factor: i } };
+      return { content: [{ type: "text", text: `${n} IS prime.` }], details: { isPrime: true } };
+    },
+  });
+}
+
+// ---- gcd/lcm connector ----
+function gcdLcmTool(): ToolDefinition {
+  return defineTool({
+    name: "mathops__gcd_lcm",
+    label: "gcd_lcm",
+    description: "Compute GCD and LCM of two integers.",
+    parameters: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } }, required: ["a", "b"] },
+    async execute(_id, params) {
+      const { a, b } = params as { a: number; b: number };
+      const gcd = (x: number, y: number): number => y === 0 ? x : gcd(y, x % y);
+      const g = gcd(Math.abs(a), Math.abs(b));
+      const l = Math.abs(a * b) / g;
+      return { content: [{ type: "text", text: `GCD(${a}, ${b}) = ${g}, LCM = ${l}` }], details: { gcd: g, lcm: l } };
+    },
+  });
+}
+
+// ---- percentage connector ----
+function percentageTool(): ToolDefinition {
+  return defineTool({
+    name: "pct__compute",
+    label: "compute",
+    description: "Compute percentage: 'what percent of B is A' or 'A% of B'. mode: 'of' or 'is'.",
+    parameters: { type: "object", properties: { a: { type: "number" }, b: { type: "number" }, mode: { type: "string", enum: ["of", "is"], description: "'is' = A is what pct of B; 'of' = A% of B. Default 'is'." } }, required: ["a", "b"] },
+    async execute(_id, params) {
+      const { a, b, mode } = params as { a: number; b: number; mode?: string };
+      if (mode === "of") { const r = (a / 100) * b; return { content: [{ type: "text", text: `${a}% of ${b} = ${r}` }], details: { result: r } }; }
+      if (b === 0) return { content: [{ type: "text", text: "Cannot divide by zero." }], details: {}, isError: true };
+      const r = (a / b) * 100;
+      return { content: [{ type: "text", text: `${a} is ${r.toFixed(2)}% of ${b}` }], details: { percent: r } };
+    },
+  });
+}
+
+// ---- ratio-simplify connector ----
+function ratioSimplifyTool(): ToolDefinition {
+  return defineTool({
+    name: "ratio__simplify",
+    label: "simplify",
+    description: "Simplify a ratio A:B to lowest terms.",
+    parameters: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } }, required: ["a", "b"] },
+    async execute(_id, params) {
+      const { a, b } = params as { a: number; b: number };
+      const gcd = (x: number, y: number): number => y === 0 ? x : gcd(y, x % y);
+      const g = gcd(Math.abs(a), Math.abs(b)) || 1;
+      return { content: [{ type: "text", text: `${a}:${b} = ${a/g}:${b/g}` }], details: { simplified: `${a/g}:${b/g}` } };
+    },
+  });
+}
+
+// ---- porter-stemmer connector (simplified) ----
+function porterStemmerTool(): ToolDefinition {
+  return defineTool({
+    name: "stemmer__porter",
+    label: "stem",
+    description: "Apply a simplified Porter stemmer to reduce English words to their stem.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const stem = (w: string): string => {
+        w = w.toLowerCase();
+        if (w.length <= 3) return w;
+        w = w.replace(/(sses|ies)$/, "ss").replace(/(ss)$/, "ss");
+        w = w.replace(/(eed)$/, "ee").replace(/(ed|ing)$/, "");
+        w = w.replace(/(ly|ment|ness|ence|ance|able|ible|al|er|ic|ou|ism|ate|iti|ous|ive|ize)$/, "");
+        return w;
+      };
+      const out = text.split(/\s+/).map(stem).join(" ");
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- n-gram connector ----
+function ngramTool(): ToolDefinition {
+  return defineTool({
+    name: "ngram__extract",
+    label: "extract",
+    description: "Extract N-grams (word sequences of length N) from text.",
+    parameters: { type: "object", properties: { text: { type: "string" }, n: { type: "number" } }, required: ["text", "n"] },
+    async execute(_id, params) {
+      const { text, n } = params as { text: string; n: number };
+      const words = text.split(/\s+/).filter(Boolean);
+      const grams: string[] = [];
+      for (let i = 0; i <= words.length - n; i++) grams.push(words.slice(i, i + n).join(" "));
+      return { content: [{ type: "text", text: grams.join("\n") || "(none)" }], details: { count: grams.length } };
+    },
+  });
+}
+
+// ---- text-wrap connector ----
+function textWrapTool(): ToolDefinition {
+  return defineTool({
+    name: "wrap__text",
+    label: "wrap",
+    description: "Wrap text to a maximum line width, breaking at word boundaries.",
+    parameters: { type: "object", properties: { text: { type: "string" }, width: { type: "number" } }, required: ["text", "width"] },
+    async execute(_id, params) {
+      const { text, width } = params as { text: string; width: number };
+      const words = text.split(/\s+/);
+      const lines: string[] = [];
+      let line = "";
+      for (const w of words) {
+        if ((line + " " + w).trim().length > width && line) { lines.push(line); line = w; }
+        else line = (line + " " + w).trim();
+      }
+      if (line) lines.push(line);
+      return { content: [{ type: "text", text: lines.join("\n") }], details: { lines: lines.length } };
+    },
+  });
+}
+
+// ---- column-align connector ----
+function columnAlignTool(): ToolDefinition {
+  return defineTool({
+    name: "colalign__align",
+    label: "align",
+    description: "Align tab/space-separated rows into aligned columns.",
+    parameters: { type: "object", properties: { text: { type: "string" }, delimiter: { type: "string", description: "Default tab." } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text, delimiter } = params as { text: string; delimiter?: string };
+      const del = delimiter ?? "\t";
+      const rows = text.split(/\r?\n/).map((r) => r.split(del));
+      const cols = Math.max(...rows.map((r) => r.length));
+      const widths: number[] = [];
+      for (let c = 0; c < cols; c++) widths[c] = Math.max(...rows.map((r) => (r[c] ?? "").length));
+      const out = rows.map((r) => r.map((cell, c) => (cell ?? "").padEnd(widths[c])).join("  ")).join("\n");
+      return { content: [{ type: "text", text: out }], details: { rows: rows.length, cols } };
     },
   });
 }

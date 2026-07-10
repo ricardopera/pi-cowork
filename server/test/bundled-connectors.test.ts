@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase", "histogram", "percentile", "correlate", "freqtable", "sortlines", "dedupe", "reverse", "chunk", "truncate", "linecount", "charfreq", "strdist",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku", "country", "langdetect", "textstats", "wordfreq", "palindrome", "anagram", "caesar", "atbash", "binconv", "textcase", "histogram", "percentile", "correlate", "freqtable", "sortlines", "dedupe", "reverse", "chunk", "truncate", "linecount", "charfreq", "strdist", "mdlinks", "diffsum", "numwords", "ordinal", "prime", "mathops", "pct", "ratio", "stemmer", "ngram", "wrap", "colalign",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 89 connector tools across 74 connectors", async () => {
+  it("seedDefaults exposes 101 connector tools across 86 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert", "histogram__build", "percentile__compute", "correlate__pearson", "freqtable__build", "sortlines__sort", "dedupe__lines", "reverse__text", "chunk__split", "truncate__text", "linecount__count", "charfreq__count", "strdist__levenshtein",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate", "country__info", "langdetect__detect", "textstats__analyze", "wordfreq__count", "palindrome__check", "anagram__check", "caesar__shift", "atbash__apply", "binconv__convert", "textcase__convert", "histogram__build", "percentile__compute", "correlate__pearson", "freqtable__build", "sortlines__sort", "dedupe__lines", "reverse__text", "chunk__split", "truncate__text", "linecount__count", "charfreq__count", "strdist__levenshtein", "mdlinks__extract", "diffsum__summarize", "numwords__convert", "ordinal__convert", "prime__check", "mathops__gcd_lcm", "pct__compute", "ratio__simplify", "stemmer__porter", "ngram__extract", "wrap__text", "colalign__align",
       ]),
     );
-    expect(names.length).toBe(89);
+    expect(names.length).toBe(101);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(89);
+    expect(mgr.getToolNames().length).toBe(101);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -654,4 +654,46 @@ describe("bundled default connectors", () => {
     expect((res.content[0] as any).text).toContain("3");
   });
 
+
+  it("prime__check identifies primes", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "prime__check")!;
+    const yes = await t.execute("tc1", { number: 17 }, undefined, undefined, {} as any);
+    expect((yes.content[0] as any).text).toContain("IS prime");
+    const no = await t.execute("tc2", { number: 15 }, undefined, undefined, {} as any);
+    expect((no.content[0] as any).text).toContain("NOT prime");
+  });
+
+  it("ordinal__convert produces ordinals", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "ordinal__convert")!;
+    const res = await t.execute("tc1", { number: 42 }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("42nd");
+  });
+
+  it("mdlinks__extract finds markdown links", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "mdlinks__extract")!;
+    const res = await t.execute("tc1", { markdown: "[click](https://x.com) here" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("click: https://x.com");
+  });
+
+  it("mathops__gcd_lcm computes GCD and LCM", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "mathops__gcd_lcm")!;
+    const res = await t.execute("tc1", { a: 12, b: 18 }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("GCD(12, 18) = 6");
+    expect(text).toContain("LCM = 36");
+  });
+
+  it("wrap__text wraps to width", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "wrap__text")!;
+    const res = await t.execute("tc1", { text: "one two three four five", width: 10 }, undefined, undefined, {} as any);
+    const lines = (res.content[0] as any).text.split("\n");
+
+
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(10);
+  });
 });
