@@ -185,6 +185,41 @@ class McpConnectorManager {
     return this.getConnectedTools().map((t) => t.name);
   }
 
+  /**
+   * Register the BUNDLED DEFAULT CONNECTORS — fetch and filesystem — as
+   * always-connected MCP-style connectors with real working tools. These ship
+   * with Pi-Cowork (no external MCP server or key required) so the agent has
+   * usable connector tools out of the box. Idempotent.
+   */
+  async seedDefaults(): Promise<void> {
+    if (!this.connectors.has("fetch")) {
+      this.connectors.set("fetch", {
+        config: {
+          id: "fetch",
+          name: "Fetch (bundled)",
+          transport: "http",
+          status: "connected",
+          toolCount: 1,
+        },
+        client: null,
+        tools: [fetchTool()],
+      });
+    }
+    if (!this.connectors.has("fs")) {
+      this.connectors.set("fs", {
+        config: {
+          id: "fs",
+          name: "Filesystem (bundled)",
+          transport: "stdio",
+          status: "connected",
+          toolCount: 3,
+        },
+        client: null,
+        tools: [fsReadTool(), fsWriteTool(), fsListTool()],
+      });
+    }
+  }
+
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
     const name = `${connectorId}__${mcpTool.name}`;
     return defineTool({
@@ -231,3 +266,121 @@ export function getMcpManager(): McpConnectorManager {
 
 // Exported for testing.
 export { McpConnectorManager };
+
+// ---- Bundled default connector tools (real, working, no external server) ----
+// These mirror the official MCP "fetch" and "filesystem" servers' tool surfaces
+// but run in-process so they work with zero setup.
+
+function fetchTool(): ToolDefinition {
+  return defineTool({
+    name: "fetch__fetch",
+    label: "fetch",
+    description:
+      "Fetch content from a URL (HTTP/HTTPS GET) and return the response body as text. " +
+      "Bundled default connector — no setup required.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The URL to fetch." },
+        maxChars: { type: "number", description: "Truncate body to this many chars (default 20000)." },
+      },
+      required: ["url"],
+    },
+    async execute(_id, params) {
+      const { url, maxChars } = params as { url: string; maxChars?: number };
+      const limit = maxChars ?? 20000;
+      try {
+        const res = await fetch(url, { redirect: "follow" });
+        const text = await res.text();
+        return {
+          content: [{ type: "text", text: `HTTP ${res.status}\n${text.slice(0, limit)}` }],
+          details: { status: res.status, length: text.length },
+          isError: !res.ok,
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Fetch failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function fsReadTool(): ToolDefinition {
+  return defineTool({
+    name: "fs__read_file",
+    label: "read_file",
+    description:
+      "Read a file from the server filesystem (absolute path) and return its text content. " +
+      "Bundled default filesystem connector.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Absolute file path." },
+        maxChars: { type: "number" },
+      },
+      required: ["path"],
+    },
+    async execute(_id, params) {
+      const { path: fpath, maxChars } = params as { path: string; maxChars?: number };
+      try {
+        const content = await import("node:fs/promises").then((fs) => fs.readFile(fpath, "utf8"));
+        return {
+          content: [{ type: "text", text: content.slice(0, maxChars ?? 50000) }],
+          details: { length: content.length },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Read failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function fsWriteTool(): ToolDefinition {
+  return defineTool({
+    name: "fs__write_file",
+    label: "write_file",
+    description:
+      "Write text content to a file on the server filesystem (absolute path). " +
+      "Bundled default filesystem connector.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        content: { type: "string" },
+      },
+      required: ["path", "content"],
+    },
+    async execute(_id, params) {
+      const { path: fpath, content } = params as { path: string; content: string };
+      try {
+        await import("node:fs/promises").then((fs) => fs.writeFile(fpath, content, "utf8"));
+        return { content: [{ type: "text", text: `Wrote ${content.length} bytes to ${fpath}.` }], details: { bytes: content.length } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Write failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+function fsListTool(): ToolDefinition {
+  return defineTool({
+    name: "fs__list_dir",
+    label: "list_dir",
+    description:
+      "List entries in a server directory (absolute path). Bundled default filesystem connector.",
+    parameters: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+    },
+    async execute(_id, params) {
+      const { path: dir } = params as { path: string };
+      try {
+        const entries = await import("node:fs/promises").then((fs) => fs.readdir(dir, { withFileTypes: true }));
+        const list = entries.map((e) => `${e.isDirectory() ? "d" : "-"} ${e.name}`);
+        return { content: [{ type: "text", text: list.join("\n") || "(empty)" }], details: { count: list.length } };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `List failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}

@@ -49,8 +49,10 @@ async function main() {
 
   // Initialize projects (creates default project on first run).
   await getProjectManager().load();
-  // Load persisted MCP connector configs (start disconnected).
+  // Load persisted MCP connector configs (start disconnected), then register the
+  // bundled default connectors (fetch + filesystem) so connector tools work out of the box.
   await getMcpManager().load();
+  await getMcpManager().seedDefaults();
 
   // Seed starter skills into the global library on first run.
   await new SkillsManager(path.join(config.dataDir, "workspaces", "default")).seedBuiltin();

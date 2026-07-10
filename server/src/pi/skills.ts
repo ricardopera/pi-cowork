@@ -137,16 +137,36 @@ export class SkillsManager {
     await fs.rm(path.join(this.globalDir, path.basename(filename)), { force: true });
   }
 
-  /** Ensure the bundled starter skills exist (seeded once on first run). */
+  /** Ensure the bundled starter skills exist (seeded once on first run).
+   *  Loads from the shipped starter-skills/ directory plus the legacy inline set. */
   async seedBuiltin(): Promise<void> {
     await fs.mkdir(this.globalDir, { recursive: true });
+    // 1. Inline legacy skills (kept for backward compatibility).
     for (const [name, content] of Object.entries(STARTER_SKILLS)) {
       const dest = path.join(this.globalDir, name);
       if (!(await fs.stat(dest).catch(() => null))) {
         await fs.writeFile(dest, content);
       }
     }
+    // 2. Authored knowledge-worker skills shipped under starter-skills/.
+    const bundledDir = path.join(getStarterSkillsDir());
+    const files = await listDir(bundledDir);
+    for (const name of files) {
+      const dest = path.join(this.globalDir, name);
+      if (await fs.stat(dest).catch(() => null)) continue; // don't overwrite
+      const content = await fs.readFile(path.join(bundledDir, name), "utf8").catch(() => "");
+      if (content) await fs.writeFile(dest, content);
+    }
   }
+}
+
+import { fileURLToPath as _fileURLToPath } from "node:url";
+function getStarterSkillsDir(): string {
+  // starter-skills/ lives next to this compiled module.
+  const here = typeof __dirname !== "undefined"
+    ? __dirname
+    : _fileURLToPath(import.meta.url).replace(/[/\\][^/\\]*$/, "");
+  return path.join(here, "starter-skills");
 }
 
 // A small starter set of skills — written originally for Pi-Cowork (not copied

@@ -33,6 +33,35 @@ describe("skills manager", () => {
     );
   });
 
+  it("seeds the expanded knowledge-worker skill set (>= 15)", async () => {
+    const m = mgr();
+    await m.seedBuiltin();
+    const names = (await m.list()).map((s) => s.name);
+    expect(names.length).toBeGreaterThanOrEqual(15);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "Draft an Email",
+        "Clean Data",
+        "Meeting Notes",
+        "Competitor Analysis",
+        "Project Brief",
+        "Summarize a Long Document",
+        "Build a Spreadsheet Model",
+        "Write a Social Post",
+        "Q&A / FAQ Prep",
+        "Code Explainer",
+        "Troubleshoot an Issue",
+        "Write a Job Description",
+        "Onboarding Doc",
+        "Decision Memo",
+        "Retrospective",
+        "Translate / Localize",
+        "Review a Pull Request",
+        "Write a Blog Post",
+      ]),
+    );
+  });
+
   it("seeding is idempotent (does not duplicate)", async () => {
     const m = mgr();
     await m.seedBuiltin();
