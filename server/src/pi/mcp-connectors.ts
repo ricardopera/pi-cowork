@@ -493,6 +493,69 @@ class McpConnectorManager {
         tools: [dateFormatTool()],
       });
     }
+    if (!this.connectors.has("weather")) {
+      this.connectors.set("weather", {
+        config: { id: "weather", name: "Weather (bundled)", transport: "http", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [weatherTool()],
+      });
+    }
+    if (!this.connectors.has("stock")) {
+      this.connectors.set("stock", {
+        config: { id: "stock", name: "Stock quote (bundled)", transport: "http", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [stockQuoteTool()],
+      });
+    }
+    if (!this.connectors.has("isbn")) {
+      this.connectors.set("isbn", {
+        config: { id: "isbn", name: "ISBN lookup (bundled)", transport: "http", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [isbnLookupTool()],
+      });
+    }
+    if (!this.connectors.has("morse")) {
+      this.connectors.set("morse", {
+        config: { id: "morse", name: "Morse code (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [morseEncodeTool(), morseDecodeTool()],
+      });
+    }
+    if (!this.connectors.has("rot13")) {
+      this.connectors.set("rot13", {
+        config: { id: "rot13", name: "ROT13 cipher (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [rot13Tool()],
+      });
+    }
+    if (!this.connectors.has("roman")) {
+      this.connectors.set("roman", {
+        config: { id: "roman", name: "Roman numerals (bundled)", transport: "stdio", status: "connected", toolCount: 2 },
+        client: null,
+        tools: [romanToNumberTool(), numberToRomanTool()],
+      });
+    }
+    if (!this.connectors.has("leet")) {
+      this.connectors.set("leet", {
+        config: { id: "leet", name: "Leet speak (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [leetTool()],
+      });
+    }
+    if (!this.connectors.has("piglatin")) {
+      this.connectors.set("piglatin", {
+        config: { id: "piglatin", name: "Pig Latin (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [pigLatinTool()],
+      });
+    }
+    if (!this.connectors.has("haiku")) {
+      this.connectors.set("haiku", {
+        config: { id: "haiku", name: "Haiku generator (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [haikuTool()],
+      });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -2159,6 +2222,241 @@ function dateFormatTool(): ToolDefinition {
         timeStyle: timeStyle ?? "short",
       }).format(date);
       return { content: [{ type: "text", text: formatted }], details: { formatted } };
+    },
+  });
+}
+
+// ---- weather connector (live, via wttr.in) ----
+function weatherTool(): ToolDefinition {
+  return defineTool({
+    name: "weather__current",
+    label: "current",
+    description: "Get current weather for a city (live via wttr.in). Returns temp, conditions, wind.",
+    parameters: { type: "object", properties: { location: { type: "string", description: "City name." } }, required: ["location"] },
+    async execute(_id, params) {
+      const { location } = params as { location: string };
+      try {
+        const res = await fetch(`https://wttr.in/${encodeURIComponent(location)}?format=j1`, { signal: AbortSignal.timeout(10000) as any });
+        const data = await res.json();
+        const cur = data.current_condition?.[0] ?? {};
+        return {
+          content: [{ type: "text", text: `${location}: ${cur.temp_C}°C / ${cur.temp_F}°F, ${cur.weatherDesc?.[0]?.value ?? "?"}, humidity ${cur.humidity}%, wind ${cur.windspeedKmph} km/h` }],
+          details: { tempC: cur.temp_C, tempF: cur.temp_F, desc: cur.weatherDesc?.[0]?.value },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Weather lookup failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- stock-quote connector (live, via stooq.com) ----
+function stockQuoteTool(): ToolDefinition {
+  return defineTool({
+    name: "stock__quote",
+    label: "quote",
+    description: "Get a stock quote (symbol, price, change) via stooq.com CSV. Live.",
+    parameters: { type: "object", properties: { symbol: { type: "string", description: "Ticker, e.g. AAPL." } }, required: ["symbol"] },
+    async execute(_id, params) {
+      const { symbol } = params as { symbol: string };
+      try {
+        const res = await fetch(`https://stooq.com/q/l/?s=${encodeURIComponent(symbol.toLowerCase())}&f=sd2t2ohlcvn&h&e=csv`, { signal: AbortSignal.timeout(10000) as any });
+        const text = await res.text();
+        const row = text.trim().split("\n")[1]?.split(",") ?? [];
+        const [sym, , , open, high, low, close, , name] = row;
+        if (!close) return { content: [{ type: "text", text: `No data for ${symbol}` }], details: {}, isError: true };
+        return {
+          content: [{ type: "text", text: `${name || sym}: close=${close}, open=${open}, high=${high}, low=${low}` }],
+          details: { symbol: sym, close, open, high, low },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Stock lookup failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- isbn-lookup connector (live, via openlibrary.org) ----
+function isbnLookupTool(): ToolDefinition {
+  return defineTool({
+    name: "isbn__lookup",
+    label: "lookup",
+    description: "Look up a book by ISBN (10 or 13) via Open Library. Returns title, author, publish year.",
+    parameters: { type: "object", properties: { isbn: { type: "string" } }, required: ["isbn"] },
+    async execute(_id, params) {
+      const { isbn } = params as { isbn: string };
+      const clean = isbn.replace(/[^0-9X]/gi, "");
+      try {
+        const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${clean}&format=json&jscmd=data`, { signal: AbortSignal.timeout(10000) as any });
+        const data = await res.json();
+        const book = data[`ISBN:${clean}`];
+        if (!book) return { content: [{ type: "text", text: `No book found for ISBN ${clean}` }], details: {}, isError: true };
+        const authors = book.authors?.map((a: any) => a.name).join(", ") ?? "Unknown";
+        return {
+          content: [{ type: "text", text: `"${book.title}" by ${authors} (${book.publish_date ?? "?"}). Publisher: ${book.publishers?.[0]?.name ?? "?"}` }],
+          details: { title: book.title, authors, publishDate: book.publish_date },
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `ISBN lookup failed: ${e?.message}` }], details: {}, isError: true };
+      }
+    },
+  });
+}
+
+// ---- morse-code connector ----
+const MORSE_MAP: Record<string, string> = {
+  A: ".-", B: "-...", C: "-.-.", D: "-..", E: ".", F: "..-.", G: "--.", H: "....", I: "..", J: ".---",
+  K: "-.-", L: ".-..", M: "--", N: "-.", O: "---", P: ".--.", Q: "--.-", R: ".-.", S: "...", T: "-",
+  U: "..-", V: "...-", W: ".--", X: "-..-", Y: "-.--", Z: "--..",
+  "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-", "5": ".....",
+  "6": "-....", "7": "--...", "8": "---..", "9": "----.", ".": ".-.-.-", ",": "--..--", "?": "..--..",
+};
+function morseEncodeTool(): ToolDefinition {
+  return defineTool({
+    name: "morse__encode",
+    label: "encode",
+    description: "Encode text to International Morse Code. Letters separated by space, words by ' / '.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const words = text.toUpperCase().split(/\s+/);
+      const encoded = words.map((word) =>
+        word.split("").map((ch) => MORSE_MAP[ch] ?? "").filter(Boolean).join(" "),
+      ).join(" / ");
+      return { content: [{ type: "text", text: encoded }], details: {} };
+    },
+  });
+}
+function morseDecodeTool(): ToolDefinition {
+  return defineTool({
+    name: "morse__decode",
+    label: "decode",
+    description: "Decode Morse Code to text. Letters separated by space, words by ' / '.",
+    parameters: { type: "object", properties: { morse: { type: "string" } }, required: ["morse"] },
+    async execute(_id, params) {
+      const { morse } = params as { morse: string };
+      const reverse: Record<string, string> = {};
+      for (const [k, v] of Object.entries(MORSE_MAP)) reverse[v] = k;
+      const words = morse.trim().split(" / ");
+      const decoded = words.map((word) =>
+        word.split(" ").map((code) => reverse[code] ?? "").join(""),
+      ).join(" ");
+      return { content: [{ type: "text", text: decoded }], details: {} };
+    },
+  });
+}
+
+// ---- rot13 connector ----
+function rot13Tool(): ToolDefinition {
+  return defineTool({
+    name: "rot13__apply",
+    label: "apply",
+    description: "Apply ROT13 cipher to text (self-inverse: apply twice to get back the original).",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const out = text.replace(/[a-zA-Z]/g, (c) => {
+        const base = c <= "Z" ? 65 : 97;
+        return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
+      });
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- roman-numerals connector ----
+function numberToRomanTool(): ToolDefinition {
+  return defineTool({
+    name: "roman__from_number",
+    label: "from_number",
+    description: "Convert an integer (1-3999) to Roman numerals.",
+    parameters: { type: "object", properties: { number: { type: "number" } }, required: ["number"] },
+    async execute(_id, params) {
+      const { number } = params as { number: number };
+      if (number < 1 || number > 3999 || !Number.isInteger(number))
+        return { content: [{ type: "text", text: "Must be an integer 1-3999." }], details: {}, isError: true };
+      const vals: [number, string][] = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]];
+      let n = number; let out = "";
+      for (const [v, s] of vals) { while (n >= v) { out += s; n -= v; } }
+      return { content: [{ type: "text", text: `${number} = ${out}` }], details: { roman: out } };
+    },
+  });
+}
+function romanToNumberTool(): ToolDefinition {
+  return defineTool({
+    name: "roman__to_number",
+    label: "to_number",
+    description: "Convert Roman numerals to an integer.",
+    parameters: { type: "object", properties: { roman: { type: "string" } }, required: ["roman"] },
+    async execute(_id, params) {
+      const { roman } = params as { roman: string };
+      const r = roman.toUpperCase();
+      const map: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+      let total = 0;
+      for (let i = 0; i < r.length; i++) {
+        const cur = map[r[i]]; const next = map[r[i + 1]];
+        if (next && cur < next) { total -= cur; } else { total += cur; }
+      }
+      return { content: [{ type: "text", text: `${roman} = ${total}` }], details: { number: total } };
+    },
+  });
+}
+
+// ---- leet-speak connector ----
+function leetTool(): ToolDefinition {
+  return defineTool({
+    name: "leet__convert",
+    label: "convert",
+    description: "Convert text to leet speak (1337). Replaces letters with numbers/symbols.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const map: Record<string, string> = { a: "4", e: "3", i: "1", o: "0", s: "5", t: "7", l: "1", b: "8", g: "9" };
+      const out = text.toLowerCase().replace(/[aeiostlbg]/g, (c) => map[c] ?? c);
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- pig-latin connector ----
+function pigLatinTool(): ToolDefinition {
+  return defineTool({
+    name: "piglatin__convert",
+    label: "convert",
+    description: "Convert English text to Pig Latin. Consonant clusters move to end + 'ay'; vowels add 'way'.",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    async execute(_id, params) {
+      const { text } = params as { text: string };
+      const out = text.split(/\s+/).map((word) => {
+        const m = word.match(/^([^aeiouAEIOU]*)(.*)/);
+        if (!m) return word;
+        const [, cluster, rest] = m;
+        if (!cluster) return rest + "way";
+        return rest + cluster + "ay";
+      }).join(" ");
+      return { content: [{ type: "text", text: out }], details: {} };
+    },
+  });
+}
+
+// ---- haiku-generator connector ----
+function haikuTool(): ToolDefinition {
+  return defineTool({
+    name: "haiku__generate",
+    label: "generate",
+    description: "Generate a 5-7-5 syllable haiku from random word banks (lightweight placeholder poetry).",
+    parameters: { type: "object", properties: { topic: { type: "string", description: "Optional topic word to weave in." } } },
+    async execute(_id, params) {
+      const topic = (params as { topic?: string }).topic ?? "";
+      const five1 = ["Silent", "Gentle", "Golden", "Quiet", "Ancient", "Hidden", "Silver", "Distant"];
+      const five2 = ["morning dew", "falling leaves", "mountain stream", "whisper wind", "ocean tide", "forest path", "starlit sky", "river bend"];
+      const seven1 = ["The crane stands still", "Petals drift away", "Moonlight bathes the earth", "Waves crash on the shore", "Clouds drift slowly by", "Sunset paints the hills"];
+      const seven2 = ["in the cold dawn light", "on the quiet pond", "through the bamboo grove", "where the herons wait", "as the world awakes", "while the crickets sing"];
+      const r = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+      const line1 = topic ? `${topic} calls softly` : `${r(five1)} ${r(five2)}`;
+      const line2 = `${r(seven1)} ${r(seven2)}`;
+      const line3 = `${r(five1)} ${r(five2)}`;
+      return { content: [{ type: "text", text: `${line1}\n${line2}\n${line3}` }], details: {} };
     },
   });
 }

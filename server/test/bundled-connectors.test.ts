@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones", "md2html", "html2text", "sentiment", "readability", "grammar", "emoji", "currency", "number", "datefmt", "weather", "stock", "isbn", "morse", "rot13", "roman", "leet", "piglatin", "haiku",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 56 connector tools across 43 connectors", async () => {
+  it("seedDefaults exposes 67 connector tools across 52 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list", "md2html__convert", "html2text__strip", "sentiment__analyze", "readability__score", "grammar__count", "emoji__info", "currency__format", "number__format", "datefmt__format", "weather__current", "stock__quote", "isbn__lookup", "morse__encode", "morse__decode", "rot13__apply", "roman__from_number", "roman__to_number", "leet__convert", "piglatin__convert", "haiku__generate",
       ]),
     );
-    expect(names.length).toBe(56);
+    expect(names.length).toBe(67);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(56);
+    expect(mgr.getToolNames().length).toBe(67);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -482,4 +482,76 @@ describe("bundled default connectors", () => {
     const res = await t.execute("tc1", { iso: "2024-01-15T10:00:00Z", timezone: "UTC" }, undefined, undefined, {} as any);
     expect((res.content[0] as any).text).toContain("2024");
   });
+
+  it("morse__encode and morse__decode round-trip", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const enc = tools.find((x) => x.name === "morse__encode")!;
+    const dec = tools.find((x) => x.name === "morse__decode")!;
+    const e = await enc.execute("tc1", { text: "SOS" }, undefined, undefined, {} as any);
+    expect((e.content[0] as any).text).toBe("... --- ...");
+    const d = await dec.execute("tc2", { morse: "... --- ..." }, undefined, undefined, {} as any);
+    expect((d.content[0] as any).text).toBe("SOS");
+  });
+
+  it("rot13__apply is self-inverse", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "rot13__apply")!;
+    const e = await t.execute("tc1", { text: "Hello" }, undefined, undefined, {} as any);
+    const d = await t.execute("tc2", { text: (e.content[0] as any).text }, undefined, undefined, {} as any);
+    expect((d.content[0] as any).text).toBe("Hello");
+  });
+
+  it("roman__from_number and roman__to_number round-trip", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const from = tools.find((x) => x.name === "roman__from_number")!;
+    const to = tools.find((x) => x.name === "roman__to_number")!;
+    const r = await from.execute("tc1", { number: 2024 }, undefined, undefined, {} as any);
+    expect((r.content[0] as any).text).toContain("MMXXIV");
+    const n = await to.execute("tc2", { roman: "MMXXIV" }, undefined, undefined, {} as any);
+    expect((n.content[0] as any).text).toContain("2024");
+  });
+
+  it("leet__convert substitutes letters", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "leet__convert")!;
+    const res = await t.execute("tc1", { text: "leet" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toBe("1337");
+  });
+
+  it("piglatin__convert moves consonant clusters", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "piglatin__convert")!;
+    const res = await t.execute("tc1", { text: "hello world" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("ello");
+    expect(text).toContain("ay");
+  });
+
+  it("haiku__generate produces a 3-line poem", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "haiku__generate")!;
+    const res = await t.execute("tc1", { topic: "code" }, undefined, undefined, {} as any);
+    const lines = (res.content[0] as any).text.split("\n");
+    expect(lines).toHaveLength(3);
+  });
+
+  it("weather__current returns data or error (live)", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "weather__current")!;
+    const res = await t.execute("tc1", { location: "London" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    if (!res.isError) expect(text).toMatch(/°C/);
+    else expect(text).toMatch(/lookup failed/i);
+  }, 20000);
+
+  it("isbn__lookup returns book data or not-found (live)", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "isbn__lookup")!;
+    const res = await t.execute("tc1", { isbn: "9780140328721" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    if (!res.isError) expect(text).toMatch(/"[^"]+"/); // title in quotes
+    else expect(text).toMatch(/No book found|lookup failed/i);
+  }, 20000);
 });
