@@ -25,7 +25,7 @@ describe("bundled default connectors", () => {
       expect.arrayContaining([
         "fetch", "fs", "time", "calc", "sqlite", "git", "env", "hash",
         "csv", "json", "md", "http", "base64", "uuid", "diff", "archive", "qr",
-        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract",
+        "xml", "yaml", "regex", "ip", "url", "slugify", "cron", "extract", "email", "phone", "color", "units", "lorem", "password", "note", "hashlist", "timezones",
       ]),
     );
     for (const id of ids) {
@@ -33,7 +33,7 @@ describe("bundled default connectors", () => {
     }
   });
 
-  it("seedDefaults exposes 36 connector tools across 25 connectors", async () => {
+  it("seedDefaults exposes 47 connector tools across 34 connectors", async () => {
     await mgr.seedDefaults();
     const names = mgr.getToolNames();
     expect(names).toEqual(
@@ -61,16 +61,16 @@ describe("bundled default connectors", () => {
         "url__parse",
         "slugify__make",
         "cron__validate",
-        "extract__archive",
+        "extract__archive", "email__validate", "phone__format", "color__convert", "units__convert", "lorem__generate", "password__generate", "note__add", "note__get", "note__list", "hashlist__algorithms", "timezones__list",
       ]),
     );
-    expect(names.length).toBe(36);
+    expect(names.length).toBe(47);
   });
 
   it("seedDefaults is idempotent", async () => {
     await mgr.seedDefaults();
     await mgr.seedDefaults();
-    expect(mgr.getToolNames().length).toBe(36);
+    expect(mgr.getToolNames().length).toBe(47);
   });
 
   it("env__get reads a non-secret variable", async () => {
@@ -330,5 +330,86 @@ describe("bundled default connectors", () => {
     expect((ok.content[0] as any).text).toContain("Valid cron");
     const bad = await t.execute("tc2", { expression: "not cron" }, undefined, undefined, {} as any);
     expect(bad.isError).toBe(true);
+  });
+
+  it("email__validate checks format and splits parts", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "email__validate")!;
+    const ok = await t.execute("tc1", { email: "a@b.com" }, undefined, undefined, {} as any);
+    expect((ok.content[0] as any).text).toContain('local="a"');
+    const bad = await t.execute("tc2", { email: "nope" }, undefined, undefined, {} as any);
+    expect((bad.content[0] as any).text).toContain("Invalid");
+  });
+
+  it("phone__format normalizes to E.164", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "phone__format")!;
+    const res = await t.execute("tc1", { phone: "+1 (415) 555-1234" }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("E.164=+14155551234");
+  });
+
+  it("color__convert converts hex to rgb/hsl", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "color__convert")!;
+    const res = await t.execute("tc1", { color: "#ff0000" }, undefined, undefined, {} as any);
+    const text = (res.content[0] as any).text;
+    expect(text).toContain("rgb(255,0,0)");
+    expect(text).toMatch(/hsl\(/);
+  });
+
+  it("units__convert converts length, weight, and temperature", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "units__convert")!;
+    const m = await t.execute("tc1", { value: 1, from: "km", to: "m" }, undefined, undefined, {} as any);
+    expect((m.content[0] as any).text).toContain("1000 m");
+    const w = await t.execute("tc2", { value: 1, from: "kg", to: "lb" }, undefined, undefined, {} as any);
+    expect((w.content[0] as any).text).toMatch(/2\.20.*lb/);
+    const temp = await t.execute("tc3", { value: 0, from: "c", to: "f" }, undefined, undefined, {} as any);
+    expect((temp.content[0] as any).text).toContain("32");
+  });
+
+  it("lorem__generate produces words/sentences", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "lorem__generate")!;
+    const w = await t.execute("tc1", { count: 10, unit: "words" }, undefined, undefined, {} as any);
+    expect((w.content[0] as any).text.split(" ")).toHaveLength(10);
+    const s = await t.execute("tc2", { count: 2, unit: "sentences" }, undefined, undefined, {} as any);
+    expect((s.content[0] as any).text.match(/\./g)?.length).toBe(2);
+  });
+
+  it("password__generate returns the requested length", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "password__generate")!;
+    const res = await t.execute("tc1", { length: 24 }, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text.length).toBe(24);
+  });
+
+  it("note add/get/list round-trips", async () => {
+    await mgr.seedDefaults();
+    const tools = mgr.getConnectedTools();
+    const add = tools.find((x) => x.name === "note__add")!;
+    const get = tools.find((x) => x.name === "note__get")!;
+    const list = tools.find((x) => x.name === "note__list")!;
+    await add.execute("tc1", { name: "groceries", body: "milk, eggs" }, undefined, undefined, {} as any);
+    const g = await get.execute("tc2", { name: "groceries" }, undefined, undefined, {} as any);
+    expect((g.content[0] as any).text).toBe("milk, eggs");
+    const l = await list.execute("tc3", {}, undefined, undefined, {} as any);
+    expect((l.content[0] as any).text).toContain("groceries");
+  });
+
+  it("hashlist__algorithms lists available hashes", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "hashlist__algorithms")!;
+    const res = await t.execute("tc1", {}, undefined, undefined, {} as any);
+    expect((res.content[0] as any).text).toContain("sha256");
+  });
+
+  it("timezones__list lists and filters zones", async () => {
+    await mgr.seedDefaults();
+    const t = mgr.getConnectedTools().find((x) => x.name === "timezones__list")!;
+    const all = await t.execute("tc1", {}, undefined, undefined, {} as any);
+    expect((all.content[0] as any).text).toContain("America/");
+    const filt = await t.execute("tc2", { filter: "Europe" }, undefined, undefined, {} as any);
+    expect((filt.content[0] as any).text).toContain("Europe/London");
   });
 });

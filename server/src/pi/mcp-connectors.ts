@@ -367,6 +367,69 @@ class McpConnectorManager {
         tools: [extractTool()],
       });
     }
+    if (!this.connectors.has("email")) {
+      this.connectors.set("email", {
+        config: { id: "email", name: "Email validate (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [emailValidateTool()],
+      });
+    }
+    if (!this.connectors.has("phone")) {
+      this.connectors.set("phone", {
+        config: { id: "phone", name: "Phone format (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [phoneFormatTool()],
+      });
+    }
+    if (!this.connectors.has("color")) {
+      this.connectors.set("color", {
+        config: { id: "color", name: "Color convert (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [colorConvertTool()],
+      });
+    }
+    if (!this.connectors.has("units")) {
+      this.connectors.set("units", {
+        config: { id: "units", name: "Units convert (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [unitsConvertTool()],
+      });
+    }
+    if (!this.connectors.has("lorem")) {
+      this.connectors.set("lorem", {
+        config: { id: "lorem", name: "Lorem ipsum (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [loremIpsumTool()],
+      });
+    }
+    if (!this.connectors.has("password")) {
+      this.connectors.set("password", {
+        config: { id: "password", name: "Password gen (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [passwordGenTool()],
+      });
+    }
+    if (!this.connectors.has("note")) {
+      this.connectors.set("note", {
+        config: { id: "note", name: "Note/scratchpad (bundled)", transport: "stdio", status: "connected", toolCount: 3 },
+        client: null,
+        tools: [noteAddTool(), noteGetTool(), noteListTool()],
+      });
+    }
+    if (!this.connectors.has("hashlist")) {
+      this.connectors.set("hashlist", {
+        config: { id: "hashlist", name: "Hash algorithms (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [hashListTool()],
+      });
+    }
+    if (!this.connectors.has("timezones")) {
+      this.connectors.set("timezones", {
+        config: { id: "timezones", name: "Timezone list (bundled)", transport: "stdio", status: "connected", toolCount: 1 },
+        client: null,
+        tools: [timezoneListTool()],
+      });
+    }
   }
 
   private adaptTool(connectorId: string, mcpTool: any, client: () => any): ToolDefinition {
@@ -1536,6 +1599,270 @@ function extractTool(): ToolDefinition {
       }
       const entries = await fsP.readdir(dest).catch(() => []);
       return { content: [{ type: "text", text: `Extracted to ${dest} (${entries.length} entries).` }], details: { count: entries.length } };
+    },
+  });
+}
+
+// ---- email-validate connector ----
+function emailValidateTool(): ToolDefinition {
+  return defineTool({
+    name: "email__validate",
+    label: "validate",
+    description: "Validate an email address format and return its local/domain parts.",
+    parameters: { type: "object", properties: { email: { type: "string" } }, required: ["email"] },
+    async execute(_id, params) {
+      const { email } = params as { email: string };
+      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const valid = re.test(email.trim());
+      const [local, domain] = email.trim().split("@");
+      return {
+        content: [{ type: "text", text: valid ? `Valid: local="${local}", domain="${domain}"` : `Invalid: ${email}` }],
+        details: { valid, local, domain },
+        isError: !valid ? false : false,
+      };
+    },
+  });
+}
+
+// ---- phone-format connector ----
+function phoneFormatTool(): ToolDefinition {
+  return defineTool({
+    name: "phone__format",
+    label: "format",
+    description: "Normalize a phone number to E.164 (+digits) and report digit count.",
+    parameters: { type: "object", properties: { phone: { type: "string" } }, required: ["phone"] },
+    async execute(_id, params) {
+      const { phone } = params as { phone: string };
+      const digits = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
+      const e164 = "+" + digits;
+      const valid = digits.length >= 10 && digits.length <= 15;
+      return {
+        content: [{ type: "text", text: `${valid ? "Valid" : "Questionable"}: E.164=${e164} (${digits.length} digits)` }],
+        details: { e164, digits: digits.length, valid },
+      };
+    },
+  });
+}
+
+// ---- color-convert connector ----
+function colorConvertTool(): ToolDefinition {
+  return defineTool({
+    name: "color__convert",
+    label: "convert",
+    description: "Convert a color between hex (#RRGGBB), rgb(r,g,b), and hsl. Input any of the three.",
+    parameters: { type: "object", properties: { color: { type: "string" } }, required: ["color"] },
+    async execute(_id, params) {
+      const { color } = params as { color: string };
+      let r = 0, g = 0, b = 0;
+      if (/^#?[0-9a-f]{6}$/i.test(color.replace("#", ""))) {
+        const h = color.replace("#", "");
+        r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+      } else if (/^rgb/i.test(color)) {
+        const m = color.match(/(\d+)/g);
+        if (m) { r = +m[0]; g = +m[1]; b = +m[2]; }
+      } else {
+        return { content: [{ type: "text", text: `Unsupported format: ${color}` }], details: {}, isError: true };
+      }
+      const hsl = rgbToHsl(r, g, b);
+      const hex = `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+      return {
+        content: [{ type: "text", text: `hex=${hex} rgb(${r},${g},${b}) hsl(${hsl.h},${hsl.s}%,${hsl.l}%)` }],
+        details: { hex, rgb: { r, g, b }, hsl },
+      };
+    },
+  });
+}
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0; const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    switch (max) {
+      case r: h = ((g - b) / d) % 6; break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h *= 60; if (h < 0) h += 360;
+  }
+  return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+
+// ---- units-convert connector ----
+function unitsConvertTool(): ToolDefinition {
+  return defineTool({
+    name: "units__convert",
+    label: "convert",
+    description: "Convert between common units. Categories: length, weight, temperature.",
+    parameters: {
+      type: "object",
+      properties: {
+        value: { type: "number" },
+        from: { type: "string", description: "e.g. 'm', 'ft', 'kg', 'lb', 'c', 'f'." },
+        to: { type: "string" },
+      },
+      required: ["value", "from", "to"],
+    },
+    async execute(_id, params) {
+      const { value, from, to } = params as { value: number; from: string; to: string };
+      const length: Record<string, number> = { m: 1, km: 1000, cm: 0.01, mi: 1609.34, ft: 0.3048, in: 0.0254 };
+      const weight: Record<string, number> = { kg: 1, g: 0.001, lb: 0.453592, oz: 0.0283495 };
+      const f = from.toLowerCase(); const t = to.toLowerCase();
+      if (length[f] && length[t]) {
+        const out = (value * length[f]) / length[t];
+        return { content: [{ type: "text", text: `${value} ${from} = ${out} ${to}` }], details: { out } };
+      }
+      if (weight[f] && weight[t]) {
+        const out = (value * weight[f]) / weight[t];
+        return { content: [{ type: "text", text: `${value} ${from} = ${out} ${to}` }], details: { out } };
+      }
+      // temperature
+      if (/[cfk]/.test(f) && /[cfk]/.test(t) && f.length === 1 && t.length === 1) {
+        let c: number;
+        if (f === "c") c = value;
+        else if (f === "f") c = (value - 32) * (5 / 9);
+        else c = value - 273.15;
+        let out: number;
+        if (t === "c") out = c;
+        else if (t === "f") out = c * (9 / 5) + 32;
+        else out = c + 273.15;
+        return { content: [{ type: "text", text: `${value}°${from} = ${out.toFixed(2)}°${to}` }], details: { out } };
+      }
+      return { content: [{ type: "text", text: `Unsupported conversion: ${from} -> ${to}` }], details: {}, isError: true };
+    },
+  });
+}
+
+// ---- lorem-ipsum connector ----
+function loremIpsumTool(): ToolDefinition {
+  return defineTool({
+    name: "lorem__generate",
+    label: "generate",
+    description: "Generate placeholder text: N words or sentences of lorem ipsum.",
+    parameters: {
+      type: "object",
+      properties: { count: { type: "number", description: "Default 30 words." }, unit: { type: "string", enum: ["words", "sentences"] } },
+    },
+    async execute(_id, params) {
+      const count = (params as { count?: number }).count ?? 30;
+      const unit = (params as { unit?: string }).unit ?? "words";
+      const words = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum".split(" ");
+      let out: string;
+      if (unit === "sentences") {
+        out = Array.from({ length: count }, () => {
+          const n = 8 + Math.floor(Math.random() * 12);
+          const s = Array.from({ length: n }, () => words[Math.floor(Math.random() * words.length)]).join(" ");
+          return s.charAt(0).toUpperCase() + s.slice(1) + ".";
+        }).join(" ");
+      } else {
+        out = Array.from({ length: count }, () => words[Math.floor(Math.random() * words.length)]).join(" ");
+      }
+      return { content: [{ type: "text", text: out }], details: { count, unit } };
+    },
+  });
+}
+
+// ---- password-gen connector ----
+function passwordGenTool(): ToolDefinition {
+  return defineTool({
+    name: "password__generate",
+    label: "generate",
+    description: "Generate a random password of given length (default 20) with a chosen alphabet.",
+    parameters: {
+      type: "object",
+      properties: {
+        length: { type: "number" },
+        symbols: { type: "boolean", description: "Include symbols (default true)." },
+        uppercase: { type: "boolean", description: "Include uppercase (default true)." },
+      },
+    },
+    async execute(_id, params) {
+      const { randomBytes } = await import("node:crypto");
+      const len = (params as { length?: number }).length ?? 20;
+      const opts = params as { symbols?: boolean; uppercase?: boolean };
+      let alpha = "abcdefghijklmnopqrstuvwxyz0123456789";
+      if (opts.uppercase !== false) alpha += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      if (opts.symbols !== false) alpha += "!@#$%^&*()-_=+";
+      const bytes = randomBytes(len);
+      const pw = Array.from(bytes, (b) => alpha[b % alpha.length]).join("");
+      return { content: [{ type: "text", text: pw }], details: { length: len } };
+    },
+  });
+}
+
+// ---- note/scratchpad connector (in-memory, per-process) ----
+const noteStore = new Map<string, string>();
+
+function noteAddTool(): ToolDefinition {
+  return defineTool({
+    name: "note__add",
+    label: "add",
+    description: "Save a named scratchpad note (in-memory, per server process).",
+    parameters: { type: "object", properties: { name: { type: "string" }, body: { type: "string" } }, required: ["name", "body"] },
+    async execute(_id, params) {
+      const { name, body } = params as { name: string; body: string };
+      noteStore.set(name, body);
+      return { content: [{ type: "text", text: `Saved note "${name}".` }], details: { name } };
+    },
+  });
+}
+function noteGetTool(): ToolDefinition {
+  return defineTool({
+    name: "note__get",
+    label: "get",
+    description: "Retrieve a named scratchpad note.",
+    parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+    async execute(_id, params) {
+      const { name } = params as { name: string };
+      const body = noteStore.get(name);
+      return { content: [{ type: "text", text: body ?? `(no note "${name}")` }], details: { found: !!body } };
+    },
+  });
+}
+function noteListTool(): ToolDefinition {
+  return defineTool({
+    name: "note__list",
+    label: "list",
+    description: "List all scratchpad note names.",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const names = [...noteStore.keys()];
+      return { content: [{ type: "text", text: names.length ? names.join(", ") : "(none)" }], details: { count: names.length } };
+    },
+  });
+}
+
+// ---- hash-algorithm-list connector ----
+function hashListTool(): ToolDefinition {
+  return defineTool({
+    name: "hashlist__algorithms",
+    label: "algorithms",
+    description: "List the hash algorithms available on this Node (via crypto.getHashes).",
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const { getHashes } = await import("node:crypto");
+      const algos = getHashes().sort();
+      return { content: [{ type: "text", text: `${algos.length} algorithms:\n${algos.join(", ")}` }], details: { count: algos.length, algos } };
+    },
+  });
+}
+
+// ---- timezone-list connector ----
+function timezoneListTool(): ToolDefinition {
+  return defineTool({
+    name: "timezones__list",
+    label: "list",
+    description: "List supported IANA timezones (via Intl.supportedValuesOf('timeZone')).",
+    parameters: {
+      type: "object",
+      properties: { filter: { type: "string", description: "Optional substring filter (e.g. 'America')." } },
+    },
+    async execute(_id, params) {
+      const filter = (params as { filter?: string }).filter;
+      const all = (Intl as any).supportedValuesOf?.("timeZone") ?? ["UTC", "America/New_York", "Europe/London", "Asia/Tokyo"];
+      const list = (filter ? all.filter((tz: string) => tz.includes(filter)) : all).sort();
+      return { content: [{ type: "text", text: `${list.length} zones:\n${list.join("\n")}` }], details: { count: list.length } };
     },
   });
 }
