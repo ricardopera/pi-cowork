@@ -27,7 +27,7 @@ Keys are managed in the in-app **Settings** view or via environment variables, a
 - Pi Agent embedded in-process: `createAgentSession` → `subscribe()` events → WebSocket → browser
 - All four providers configurable; live model catalogs per provider
 - Session lifecycle (create / list / abort) with streaming over WebSocket
-- **Sandboxed execution layer** (bubblewrap): bash commands run inside a per-session `bwrap` container — read-only host toolchain (/usr, /bin, /lib), private tmpfs `/tmp`, the workspace bind-mounted as the only writable path, user/PID/IPC namespaces unshared (`--unshare-all`), optional network egress. Falls back to plain exec when bwrap is absent. Mirrors Cowork's sandboxed-VM model.
+- - **Sandboxed execution layer** (pinned-toolchain bubblewrap): bash/file tools run inside a per-session bubblewrap container against a SELF-CONTAINED pinned Alpine 3.20 rootfs (its own python3/node/git/coreutils — NOT the host userspace), with the workspace as the only writable path and user/PID/IPC namespaces unshared. Mirrors Cowork's pinned-VM model. `npm run prepare-rootfs` builds the image; falls back to host-userspace isolation if absent.
 - **Cowork-style safety guardrails** enforced via a `tool_call` hook: a **prohibited-action list** (banking/ID data, system-file/permission mods, trades, destructive commands, secret exfiltration — always blocked) and an **explicit-permission list** (downloads, purchases, OAuth, publishing, sending messages, mass-deletes — surfaced as Approve/Deny cards the user must confirm); prompt errors surfaced to the client
 
 **64 agent tools** (registered per session):

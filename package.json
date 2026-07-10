@@ -16,7 +16,8 @@
     "build:desktop": "npm -w web run build && npm -w server run build",
     "desktop": "npm -w @pi-cowork/desktop run start",
     "test": "npm -w server run test",
-    "e2e": "npm -w e2e run test"
+    "e2e": "npm -w e2e run test",
+    "prepare-rootfs": "bash scripts/prepare-rootfs.sh"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

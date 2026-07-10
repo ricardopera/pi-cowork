@@ -2,20 +2,28 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 
 /**
- * Sandboxed execution layer (mirrors Claude Cowork's bubblewrap/VM model).
+ * Sandboxed execution layer (mirrors Claude Cowork's pinned-toolchain VM model).
  *
- * Each command runs inside a bubblewrap (`bwrap`) container with:
- *   - A read-only OS toolchain (/usr, /bin, /lib, /lib64) mounted from the host
- *   - /proc and /dev mounted fresh
- *   - A private tmpfs /tmp (host /tmp NOT visible)
- *   - The session workspace bind-mounted read-write at /workspace (the only
- *     writable host path the sandbox can reach)
- *   - User/PID/IPC namespaces unshared (--unshare-all); network shared by default
- *     so the agent can curl/install, toggleable per-session
- *   - cwd set to /workspace so the command "lives" in the sandboxed workspace
+ * Two sandbox modes:
+ *
+ *  1. PINNED ROOTFS (default when available): a self-contained Linux rootfs
+ *     (Alpine 3.20 + python3/node/git/... — the "pinned toolchain") is bundled
+ *     under sandbox-rootfs/rootfs. Commands run with that rootfs as `/`, so
+ *     bash/file tools execute against a FIXED, REPRODUCIBLE OS image — not the
+ *     host's userspace. The workspace is the only host path mounted (rw at
+ *     /workspace). This matches Cowork's sandboxed-VM-with-pinned-toolchain
+ *     model.
+ *
+ *  2. HOST USERSPACE (fallback): if the pinned rootfs isn't present, bwrap
+ *     read-only-binds the host's /usr, /bin, /lib, /lib64, /sbin. Less
+ *     reproducible (depends on the host) but still namespace-isolated.
+ *
+ * Both modes: /proc and /dev fresh, private tmpfs /tmp (host /tmp hidden),
+ * user/PID/IPC/net namespaces unshared (--unshare-all), cwd=/workspace.
  *
  * Falls back to plain execution if bwrap is unavailable (logged), so the app
  * still works on systems without bubblewrap.
@@ -35,11 +43,37 @@ export function isBwrapAvailable(): boolean {
   return bwrapAvailable;
 }
 
-// Read-only host paths that form the pinned Linux toolchain inside the sandbox.
-// Mounting these read-only gives the sandbox a full userspace (sh, coreutils,
-// python, node, gcc, git, etc. — whatever the host has) without leaking host
-// state or config.
-const RO_BINDS: string[] = ["/usr", "/bin", "/lib", "/lib64", "/sbin", "/etc/alternatives"];
+/**
+ * Resolve the pinned rootfs directory. Looks for a bundled Alpine rootfs at
+ * <repo>/sandbox-rootfs/rootfs (shipped with Pi-Cowork). Returns null if absent
+ * (caller falls back to host-userspace mode).
+ */
+export function getPinnedRootfs(): string | null {
+  // sandbox-rootfs/ lives at the repo root. Resolve from this module's location
+  // (works for tsx src/pi/ and built dist/pi/) plus cwd (dev from repo root).
+  const here =
+    typeof __dirname !== "undefined"
+      ? __dirname
+      : path.dirname(fileURLToPath(import.meta.url));
+  // Check by looking for the rootfs marker without following symlinks: the
+  // rootfs's /bin/sh is a symlink whose absolute target only resolves *inside*
+  // the rootfs, so existsSync (which follows) returns false from the host.
+  // Use lstatSync on the rootfs dir + check bin/busybox (a real file) instead.
+  const isRootfs = (dir: string): boolean =>
+    fs.existsSync(path.join(dir, "sbin", "apk")) &&
+    (fs.existsSync(path.join(dir, "bin", "busybox")) ||
+      fs.existsSync(path.join(dir, "usr", "bin", "busybox")));
+  for (const up of ["../../..", ".."]) {
+    const candidate = path.join(here, up, "sandbox-rootfs", "rootfs");
+    if (isRootfs(candidate)) return path.resolve(candidate);
+  }
+  const cwdCandidate = path.resolve("sandbox-rootfs", "rootfs");
+  if (isRootfs(cwdCandidate)) return cwdCandidate;
+  return null;
+}
+
+// Host paths used only in HOST USERSPACE fallback mode.
+const HOST_RO_BINDS: string[] = ["/usr", "/bin", "/lib", "/lib64", "/sbin", "/etc/alternatives"];
 
 export interface SandboxOptions {
   /** Absolute host path of the session workspace (bind-mounted at /workspace). */
@@ -50,6 +84,18 @@ export interface SandboxOptions {
   roBinds?: string[];
   /** Timeout ms (passed through to the runner). */
   timeoutMs?: number;
+  /**
+   * Force a specific mode: "pinned" uses the bundled rootfs, "host" uses the
+   * host's userspace. Default: auto (pinned if available, else host).
+   */
+  mode?: "pinned" | "host" | "auto";
+}
+
+/** Resolve effective mode: pinned if rootfs present (unless explicitly host). */
+function resolveMode(mode?: "pinned" | "host" | "auto"): "pinned" | "host" {
+  if (mode === "host") return "host";
+  if (mode === "pinned") return getPinnedRootfs() ? "pinned" : "host";
+  return getPinnedRootfs() ? "pinned" : "host";
 }
 
 /**
@@ -58,28 +104,40 @@ export interface SandboxOptions {
  */
 export function buildBwrapArgs(command: string, opts: SandboxOptions): string[] {
   const args: string[] = [];
-  // Read-only toolchain
-  for (const dir of RO_BINDS) {
-    if (fs.existsSync(dir)) {
-      args.push("--ro-bind", dir, dir);
+  const mode = resolveMode(opts.mode);
+  const rootfs = getPinnedRootfs();
+
+  if (mode === "pinned" && rootfs) {
+    // PINNED ROOTFS: the bundled Alpine rootfs becomes `/`. Its own pinned
+    // toolchain (sh, coreutils, python3, node, git, ...) is used — NOT host.
+    args.push("--bind", rootfs, "/");
+    args.push("--dev", "/dev", "--proc", "/proc");
+    // Private tmpfs /tmp (the rootfs has no /tmp content anyway).
+    args.push("--tmpfs", "/tmp");
+    // DNS for network egress (apk/curl/git work) — copy host resolv.conf in.
+    if (fs.existsSync("/etc/resolv.conf")) {
+      args.push("--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf");
     }
+    // ca-certificates from the rootfs handle TLS.
+  } else {
+    // HOST USERSPACE fallback: read-only host toolchain.
+    for (const dir of HOST_RO_BINDS) {
+      if (fs.existsSync(dir)) args.push("--ro-bind", dir, dir);
+    }
+    args.push("--proc", "/proc", "--dev", "/dev");
+    args.push("--tmpfs", "/tmp");
   }
-  // /proc + /dev fresh
-  args.push("--proc", "/proc", "--dev", "/dev");
-  // Private tmpfs /tmp (host /tmp hidden)
-  args.push("--tmpfs", "/tmp");
-  // Extra read-only binds
+
+  // Extra read-only binds (host dirs the caller wants exposed).
   for (const dir of opts.roBinds ?? []) {
     if (fs.existsSync(dir)) args.push("--ro-bind", dir, dir);
   }
-  // Workspace bind-mounted read-write at /workspace
+  // Workspace bind-mounted read-write at /workspace (the only writable host path).
   args.push("--bind", opts.workspace, "/workspace");
   // Namespace isolation: own user/pid/ipc/net namespace.
   args.push("--unshare-all");
-  if (opts.network !== false) args.push("--share-net"); // re-share net if allowed
-  // Die with parent, fresh session (can't tty-takeover)
+  if (opts.network !== false) args.push("--share-net");
   args.push("--die-with-parent", "--new-session");
-  // chdir to the workspace then run the command
   args.push("--chdir", "/workspace", "/bin/sh", "-c", command);
   return args;
 }
