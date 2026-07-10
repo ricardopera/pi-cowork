@@ -3,7 +3,7 @@ import type { Turn } from "./types";
 import { ToolCard } from "./ToolCard";
 import { Markdown } from "./Markdown";
 
-export function MessageList({ turns }: { turns: Turn[] }) {
+export function MessageList({ turns, onExample }: { turns: Turn[]; onExample?: (text: string) => void }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -16,17 +16,17 @@ export function MessageList({ turns }: { turns: Turn[] }) {
           <div className="empty-icon">✦</div>
           <h2>How can I help?</h2>
           <div className="examples">
-            <button className="example" onClick={() => {}}>
+            <button className="example" onClick={() => onExample?.("Write a one-page report on renewable energy trends")}>
               📄 Write a one-page report on renewable energy trends
             </button>
-            <button className="example" onClick={() => {}}>
+            <button className="example" onClick={() => onExample?.("Create a spreadsheet comparing three project management tools")}>
               📊 Create a spreadsheet comparing three project management tools
             </button>
-            <button className="example" onClick={() => {}}>
+            <button className="example" onClick={() => onExample?.("Research the latest developments in quantum computing and summarize")}>
               🔍 Research the latest developments in quantum computing
             </button>
-            <button className="example" onClick={() => {}}>
-              📑 Draft meeting notes from this transcript
+            <button className="example" onClick={() => onExample?.("Draft a professional email announcing a product launch")}>
+              📑 Draft a professional email announcing a product launch
             </button>
           </div>
         </div>

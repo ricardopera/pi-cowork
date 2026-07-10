@@ -180,7 +180,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
             {files.length > 0 && <FileChips files={files} />}
           </div>
         )}
-        <MessageList turns={turns} />
+        <MessageList turns={turns} onExample={send} />
         <Composer onSend={send} disabled={busy} status={status} />
         {busy && socket && (
           <button className="abort" onClick={() => socket.abort()}>
